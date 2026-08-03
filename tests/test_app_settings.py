@@ -35,6 +35,21 @@ class AppSettingsTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "绝对路径"):
                 service.update({"media_root": "relative/folder"})
 
+    def test_directory_picker_returns_an_existing_absolute_path_without_saving_it(self):
+        with tempfile.TemporaryDirectory() as workspace, tempfile.TemporaryDirectory() as selected:
+            received = []
+            service = AppSettingsService(
+                workspace,
+                SessionIndex(workspace),
+                directory_picker=lambda initial: received.append(initial) or selected,
+            )
+
+            result = service.select_directory("")
+
+            self.assertEqual(Path(result), Path(selected).resolve())
+            self.assertEqual(Path(received[0]), service.default_media_root)
+            self.assertEqual(Path(service.get()["media_root"]), service.default_media_root)
+
 
 class AppSettingsApiTests(unittest.IsolatedAsyncioTestCase):
     async def test_get_put_and_validation(self):
@@ -47,6 +62,25 @@ class AppSettingsApiTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(status, 200)
             self.assertEqual(state["theme"], "dark")
             self.assertEqual((await api.handle("PUT", "/api/app-settings", {"theme": "blue"}))[0], 400)
+
+    async def test_directory_picker_supports_selection_and_cancel(self):
+        with tempfile.TemporaryDirectory() as workspace, tempfile.TemporaryDirectory() as selected:
+            service = AppSettingsService(
+                workspace,
+                SessionIndex(workspace),
+                directory_picker=lambda _initial: selected,
+            )
+            api = AppSettingsAPI(service)
+
+            status, state = await api.handle("POST", "/api/app-settings/directory-picker", {})
+            self.assertEqual(status, 200)
+            self.assertTrue(state["selected"])
+            self.assertEqual(Path(state["path"]), Path(selected).resolve())
+
+            service.directory_picker = lambda _initial: None
+            status, state = await api.handle("POST", "/api/app-settings/directory-picker", {})
+            self.assertEqual(status, 200)
+            self.assertEqual(state, {"selected": False, "path": ""})
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 <script setup>
 import { onMounted, ref } from 'vue'
-import { FolderOpen, Moon, RotateCcw, Save, Sun } from '@lucide/vue'
+import { Check, FolderOpen, Moon, RotateCcw, Save, Sun } from '@lucide/vue'
 import { api } from '../lib/api.js'
 import { applyTheme } from '../lib/theme.js'
 
@@ -9,6 +9,7 @@ const mediaRoot = ref('')
 const defaultMediaRoot = ref('')
 const loading = ref(true)
 const saving = ref(false)
+const pickingFolder = ref(false)
 const msg = ref('')
 
 async function load() {
@@ -32,6 +33,26 @@ function chooseTheme(value) {
 
 function resetMediaRoot() {
   mediaRoot.value = defaultMediaRoot.value
+  msg.value = '已恢复默认目录，保存后生效'
+}
+
+async function chooseMediaRoot() {
+  pickingFolder.value = true
+  msg.value = '正在打开系统文件夹选择器…'
+  try {
+    const data = await api('POST', '/api/app-settings/directory-picker', {
+      initial_directory: mediaRoot.value.trim(),
+    })
+    if (data.selected && data.path) {
+      mediaRoot.value = data.path
+      msg.value = '已选择文件夹，保存后生效'
+    } else {
+      msg.value = '已取消选择'
+    }
+  } catch (e) {
+    msg.value = '无法选择文件夹：' + ((e.body && e.body.error) || e.message)
+  }
+  pickingFolder.value = false
 }
 
 async function save() {
@@ -58,22 +79,37 @@ onMounted(load)
   <div v-if="loading" class="panel muted">加载中…</div>
   <template v-else>
     <section class="panel general-settings-panel">
-      <div class="setting-section-head"><div><h2>界面主题</h2><span>切换后立即应用，并在下次启动时保留。</span></div></div>
+      <div class="setting-section-head"><div><h2>界面主题</h2><span>选择后立即预览，保存后在下次启动时保留。</span></div></div>
       <div class="theme-picker" role="group" aria-label="界面主题">
-        <button type="button" :class="{ active: theme === 'light' }" @click="chooseTheme('light')"><Sun :size="18" /><span><strong>明亮</strong><small>适合白天和高亮环境</small></span></button>
-        <button type="button" :class="{ active: theme === 'dark' }" @click="chooseTheme('dark')"><Moon :size="18" /><span><strong>暗色</strong><small>适合夜间和长时间创作</small></span></button>
+        <button type="button" :class="{ active: theme === 'light' }" :aria-pressed="theme === 'light'" @click="chooseTheme('light')">
+          <span class="theme-icon"><Sun :size="18" /></span>
+          <span class="theme-copy"><strong>明亮</strong><small>清晰明快，适合白天</small></span>
+          <span v-if="theme === 'light'" class="theme-selected"><Check :size="14" />当前</span>
+        </button>
+        <button type="button" :class="{ active: theme === 'dark' }" :aria-pressed="theme === 'dark'" @click="chooseTheme('dark')">
+          <span class="theme-icon"><Moon :size="18" /></span>
+          <span class="theme-copy"><strong>暗色</strong><small>低亮舒适，适合夜间</small></span>
+          <span v-if="theme === 'dark'" class="theme-selected"><Check :size="14" />当前</span>
+        </button>
       </div>
     </section>
 
     <section class="panel general-settings-panel">
       <div class="setting-section-head"><div><h2>媒体存储目录</h2><span>新建项目生成的图片、视频、音频和中间文件将保存在这里。</span></div></div>
-      <label for="media-storage-root">绝对路径</label>
+      <label for="media-storage-root">存储位置</label>
       <div class="storage-path-row">
-        <span class="storage-path-icon"><FolderOpen :size="17" /></span>
-        <input id="media-storage-root" v-model="mediaRoot" type="text" placeholder="例如 D:\\SceneForgeMedia" spellcheck="false" />
-        <button class="ghost" type="button" title="恢复默认目录" @click="resetMediaRoot"><RotateCcw :size="15" />恢复默认</button>
+        <div class="storage-path-input">
+          <FolderOpen :size="17" aria-hidden="true" />
+          <input id="media-storage-root" v-model="mediaRoot" type="text" placeholder="例如 D:\\SceneForgeMedia" spellcheck="false" />
+        </div>
+        <button class="ghost storage-browse" type="button" :disabled="pickingFolder" @click="chooseMediaRoot">
+          <FolderOpen :size="16" />{{ pickingFolder ? '选择中…' : '选择文件夹' }}
+        </button>
+        <button class="ghost icon-action" type="button" title="恢复默认目录" aria-label="恢复默认目录" @click="resetMediaRoot">
+          <RotateCcw :size="16" />
+        </button>
       </div>
-      <div class="storage-note">更换目录不会移动已有项目；历史创作仍从原目录读取。目录不存在时会自动创建，并在保存时检查是否可写。</div>
+      <div class="storage-note">可以直接输入绝对路径，也可以从电脑中选择。更换目录不会移动已有项目，保存时会检查目录是否可写。</div>
     </section>
 
     <div class="settings-savebar">
