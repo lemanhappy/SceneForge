@@ -47,6 +47,20 @@ assets/characters/
 assets/models/
 skills_user/*.md
 
+# Internal product planning kept locally, not published
+docs/SceneForge补充优化方案.md
+docs/SceneForge功能描述文档.md
+docs/SceneForge开源优化方案.md
+docs/SceneForge可行性与重构计划.md
+docs/SceneForge模型竞争分析与强化路线.md
+docs/SceneForge项目优化方案.md
+docs/产品差距与开发计划.md
+docs/产品需求文档.md
+docs/多人协作产品规划.md
+docs/上游社区.md
+docs/消息审核与角色设计方案.md
+docs/设计/
+
 # Editor and operating-system files
 .idea/
 .vscode/

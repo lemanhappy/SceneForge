@@ -2,7 +2,7 @@
 name = "sceneforge"
 version = "1.1.0"
 description = "Local-first AI short drama and social video production studio"
-readme = "readme.md"
+readme = "README.md"
 requires-python = ">=3.12"
 license = { file = "LICENSE" }
 authors = [
