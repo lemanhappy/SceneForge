@@ -4,6 +4,39 @@
 
 SceneForge is a local-first AI production studio for short dramas and social videos. It turns an idea or imported script into a reviewable workflow covering script writing, storyboard design, shot generation, and final editing.
 
+## See It In Action
+
+AI-generated sample videos produced end to end with SceneForge. Click a preview to open the full MP4.
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <a href="docs/media/rainy-office-demo.mp4"><img src="docs/media/rainy-office-preview.gif" alt="Rainy office multi-shot demo" width="100%"></a><br>
+      <sub><b>Rainy Office</b> - consistent character, location, and visual tone across shots</sub>
+    </td>
+    <td width="50%" align="center">
+      <a href="docs/media/laundromat-demo.mp4"><img src="docs/media/laundromat-preview.gif" alt="Laundromat narrative demo" width="100%"></a><br>
+      <sub><b>Laundromat</b> - a compact narrative sequence with action and subtitles</sub>
+    </td>
+  </tr>
+</table>
+
+## Production Workflow
+
+```mermaid
+flowchart LR
+    A["Idea or script"] --> B["Script writing"]
+    B --> C["Storyboard design"]
+    C --> D["Shot generation"]
+    D --> Q{"Quality and continuity"}
+    Q -->|Pass| E["Final editing"]
+    Q -->|Regenerate selected shot| D
+    E --> F["Export video"]
+    R["Characters / props / scenes / Skills"] -.-> C
+    R -.-> D
+    S["Voice / subtitles / SFX / BGM"] --> E
+```
+
 ## Highlights
 
 - Four-stage production workflow with review, revision, interruption, and resume support.

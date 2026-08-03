@@ -4,6 +4,39 @@
 
 SceneForge 是一个面向 AI 短剧和自媒体视频的本地优先创作工作台。用户可以从主题创意或已有剧本开始，依次完成剧本创作、分镜设计、镜头生成和成片制作。
 
+## 成片效果
+
+以下样片由 SceneForge 端到端生成，点击动态预览可打开完整 MP4 视频。
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <a href="docs/media/rainy-office-demo.mp4"><img src="docs/media/rainy-office-preview.gif" alt="雨夜办公室多镜头样片" width="100%"></a><br>
+      <sub><b>雨夜办公室</b> - 多镜头下保持人物、场景和视觉氛围一致</sub>
+    </td>
+    <td width="50%" align="center">
+      <a href="docs/media/laundromat-demo.mp4"><img src="docs/media/laundromat-preview.gif" alt="洗衣店叙事样片" width="100%"></a><br>
+      <sub><b>洗衣店</b> - 包含人物动作和字幕的紧凑叙事片段</sub>
+    </td>
+  </tr>
+</table>
+
+## 创作流程
+
+```mermaid
+flowchart LR
+    A["创意或已有剧本"] --> B["剧本创作"]
+    B --> C["分镜设计"]
+    C --> D["镜头生成"]
+    D --> Q{"质量与连续性检查"}
+    Q -->|通过| E["成片制作"]
+    Q -->|局部重做| D
+    E --> F["导出视频"]
+    R["角色 / 道具 / 场景 / Skill"] -.-> C
+    R -.-> D
+    S["配音 / 字幕 / 音效 / BGM"] --> E
+```
+
 ## 主要能力
 
 - 四阶段审核工作流，支持修改、终止、继续和断点恢复。
