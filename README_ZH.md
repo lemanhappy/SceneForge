@@ -1,5 +1,7 @@
 # SceneForge
 
+[English](readme.md) | [简体中文](README_ZH.md)
+
 SceneForge 是一个面向 AI 短剧和自媒体视频的本地优先创作工作台。用户可以从主题创意或已有剧本开始，依次完成剧本创作、分镜设计、镜头生成和成片制作。
 
 ## 主要能力
@@ -31,6 +33,15 @@ macOS 或 Linux 请将最后一条命令替换为 `uv run python main_server.py`
 模型服务可以在设置页面配置，也可以将 `configs/agent.example.yaml` 复制为已忽略的 `configs/agent.local.yaml`。还可以使用 `SCENEFORGE_API_KEY`、`SCENEFORGE_LLM_API_KEY`、`SCENEFORGE_IMAGE_API_KEY` 和 `SCENEFORGE_VIDEO_API_KEY` 等环境变量。不要把真实凭据写入公开流水线模板。
 
 模型调用可能向外部供应商发送提示词、参考媒体和生成参数，并可能产生费用。使用前应确认供应商的隐私、数据保留、内容和计费条款。
+
+## 命令行
+
+macOS 或 Linux 可以通过终端界面创建和管理项目：
+
+```bash
+./sceneforge tui
+./sceneforge tui new
+```
 
 ## 数据目录
 

@@ -1,5 +1,7 @@
 # SceneForge
 
+[English](readme.md) | [简体中文](README_ZH.md)
+
 SceneForge is a local-first AI production studio for short dramas and social videos. It turns an idea or imported script into a reviewable workflow covering script writing, storyboard design, shot generation, and final editing.
 
 ## Highlights
