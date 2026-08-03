@@ -1,0 +1,13 @@
+SceneForge
+Copyright (c) 2026 SceneForge contributors
+
+SceneForge is derived from HKUDS/ViMax and retains the upstream MIT license
+notice in the repository LICENSE file. The upstream project is available at:
+
+    https://github.com/HKUDS/ViMax
+
+SceneForge includes original product, workflow, persistence, quality-control,
+provider-integration, and user-interface work developed after that baseline.
+
+Third-party libraries, tools, model services, and optional media components
+remain subject to their own licenses and terms. See THIRD_PARTY_NOTICES.md.

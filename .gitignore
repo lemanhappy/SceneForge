@@ -1,0 +1,54 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info/
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Virtual environments
+.venv/
+.env
+.env.*
+!.env.example
+
+# working directory
+.working_dir/
+.sceneforge/
+.vimax/
+.test/
+
+# Runtime output and local diagnostics
+.public_artifacts/
+.test_console/
+.tmp/
+.verify_output/
+.server*.log
+.server*.port
+server-*.log
+server-*.port
+.web_token.txt
+webui-dist/
+
+# Node dependencies
+node_modules/
+
+# Local agent secrets
+configs/*.local.json
+configs/*.local.yaml
+
+# User-managed assets and extensions
+assets/preferences.json
+assets/characters/
+assets/models/
+skills_user/*.md
+
+# Editor and operating-system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
