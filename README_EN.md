@@ -26,6 +26,11 @@ Calling Seedance, Veo, or another video model usually gives you one generated cl
 
 These samples were produced end to end with SceneForge. Click an animated preview to open the full MP4 with audio.
 
+> [!NOTE]
+> **About the demo models**
+>
+> The public demos use cost-first, lower-priced model configurations. They are intended to demonstrate SceneForge's multi-shot production, asset reuse, continuity control, and final assembly rather than the highest possible visual quality. Language, image, and video models can be switched independently; using newer, more capable models can typically improve character consistency, image detail, motion quality, and shot stability. Actual gains depend on the selected model and provider.
+
 <table>
   <tr>
     <td width="50%" align="center">
