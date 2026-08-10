@@ -101,7 +101,7 @@ class ProductionService:
                 pass
         return report
 
-    def start_topic(self, idea: str, target: Optional[str] = None, user_requirement: str = "", style: str = "", domain: str = "", character_asset_ids: Optional[list] = None, prop_asset_ids: Optional[list] = None, scene_asset_ids: Optional[list] = None, lora_ids: Optional[list] = None, mode: str = "idea", script: str = "", target_language: Optional[str] = None, aspect_ratio: Optional[str] = None, overrides: Optional[dict] = None, quality_tier: str = "balanced", continuity_source_session_id: Optional[str] = None) -> dict:
+    def start_topic(self, idea: str, target: Optional[str] = None, user_requirement: str = "", style: str = "", domain: str = "", character_asset_ids: Optional[list] = None, prop_asset_ids: Optional[list] = None, scene_asset_ids: Optional[list] = None, lora_ids: Optional[list] = None, mode: str = "idea", script: str = "", target_language: Optional[str] = None, aspect_ratio: Optional[str] = None, overrides: Optional[dict] = None, quality_tier: str = "balanced", continuity_source_session_id: Optional[str] = None, series_id: Optional[str] = None, episode_number: Optional[int] = None, episode_title: str = "", episode_outline: str = "", previous_episode_id: Optional[str] = None, series_context: Optional[dict] = None) -> dict:
         payload = {
             "idea": idea,
             "user_requirement": user_requirement,
@@ -118,6 +118,12 @@ class ProductionService:
             "overrides": dict(overrides or {}),
             "quality_tier": quality_tier,
             "continuity_source_session_id": str(continuity_source_session_id or ""),
+            "series_id": str(series_id or ""),
+            "episode_number": episode_number,
+            "episode_title": str(episode_title or ""),
+            "episode_outline": str(episode_outline or ""),
+            "previous_episode_id": str(previous_episode_id or ""),
+            "series_context": dict(series_context or {}),
         }
         if self._durable:
             return self._submit_durable(self._START_TOPIC, payload, target=target)
@@ -134,6 +140,15 @@ class ProductionService:
                 kwargs["lora_ids"] = lora_ids
             if continuity_source_session_id:
                 kwargs["continuity_source_session_id"] = continuity_source_session_id
+            if series_id:
+                kwargs.update({
+                    "series_id": series_id,
+                    "episode_number": episode_number,
+                    "episode_title": episode_title,
+                    "episode_outline": episode_outline,
+                    "previous_episode_id": previous_episode_id,
+                    "series_context": dict(series_context or {}),
+                })
             return await self.engine.start_topic(idea, **kwargs)
         return self.runner.submit(work, key=None, on_done=self._notify_cb(target), progress=prog)
 
@@ -954,6 +969,15 @@ class ProductionService:
             kwargs["lora_ids"] = lora_ids
         if payload.get("continuity_source_session_id"):
             kwargs["continuity_source_session_id"] = str(payload["continuity_source_session_id"])
+        if payload.get("series_id"):
+            kwargs.update({
+                "series_id": str(payload["series_id"]),
+                "episode_number": int(payload.get("episode_number") or 1),
+                "episode_title": str(payload.get("episode_title") or ""),
+                "episode_outline": str(payload.get("episode_outline") or ""),
+                "previous_episode_id": str(payload.get("previous_episode_id") or ""),
+                "series_context": dict(payload.get("series_context") or {}),
+            })
         return await self.engine.start_topic(str(payload.get("idea") or ""), **kwargs)
 
     async def _handle_approve(self, spec: JobSpec, context) -> dict:

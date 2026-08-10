@@ -593,6 +593,10 @@ class WorkflowEngine:
                           aspect_ratio: Optional[str] = None, overrides: Optional[dict] = None,
                           quality_tier: str = "balanced",
                           continuity_source_session_id: Optional[str] = None,
+                          series_id: Optional[str] = None, episode_number: Optional[int] = None,
+                          episode_title: str = "", episode_outline: str = "",
+                          previous_episode_id: Optional[str] = None,
+                          series_context: Optional[dict] = None,
                           progress=None) -> dict:
         mode = "script" if str(mode) == "script" else "idea"
         moderator = self._live_moderator()
@@ -624,7 +628,11 @@ class WorkflowEngine:
                                              target_language=target_language, aspect_ratio=aspect_ratio,
                                              overrides=overrides, quality_tier=quality_tier,
                                              config_snapshot=self._project_config_snapshot(),
-                                             continuity_source_session_id=source_session_id or None)
+                                             continuity_source_session_id=source_session_id or None,
+                                             series_id=series_id, episode_number=episode_number,
+                                             episode_title=episode_title, episode_outline=episode_outline,
+                                             previous_episode_id=previous_episode_id,
+                                             series_context=series_context)
         sid = session["session_id"]
         self.session_index.update_stage(sid, "script_generating",
                                         "Importing script" if mode == "script" else "Generating script from topic")
@@ -1407,11 +1415,35 @@ class WorkflowEngine:
 
     def _augment_requirement(self, session: dict, instruction: str) -> str:
         base = str(session.get("user_requirement", "") or "")
+        series = self._series_episode_brief(session)
         cast = self._cast_brief(session)
         reusable = self._reusable_asset_brief(session)
         inherited = self._continuity_inheritance_brief(session)
-        out = "\n".join(p for p in (base, cast, reusable, inherited) if p)
+        out = "\n".join(p for p in (base, series, cast, reusable, inherited) if p)
         return f"{out}\n修改意见：{instruction}".strip() if instruction else out
+
+    @staticmethod
+    def _series_episode_brief(session: dict) -> str:
+        if not session.get("series_id"):
+            return ""
+        context = session.get("series_context") or {}
+        number = int(session.get("episode_number") or 1)
+        lines = [
+            "连续短剧约束（本集必须服从作品设定，并与前后集保持叙事一致）：",
+            f"- 作品：{context.get('title') or session.get('series_id')}，第 {number} 集"
+            + (f"《{session.get('episode_title')}》" if session.get("episode_title") else ""),
+        ]
+        if context.get("premise"):
+            lines.append("- 整体故事：" + str(context["premise"]))
+        if session.get("episode_outline"):
+            lines.append("- 本集剧情目标：" + str(session["episode_outline"]))
+        duration = context.get("episode_duration_sec")
+        if duration:
+            lines.append(f"- 本集目标时长：约 {int(duration)} 秒")
+        bible = context.get("bible") or {}
+        if bible:
+            lines.append("- 作品设定：" + json.dumps(bible, ensure_ascii=False, separators=(",", ":")))
+        return "\n".join(lines)
 
     async def _gen_script(self, session: dict, instruction: str = "") -> str:
         return await self.stage_handlers.run("script", self, session, instruction)

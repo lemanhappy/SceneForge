@@ -53,7 +53,7 @@ class AppAPI:
                  production_api: Any = None, bgm_api: Any = None, voice_api: Any = None,
                  features_api: Any = None, sfx_api: Any = None, templates_api: Any = None,
                  edit_api: Any = None, skills_api: Any = None, app_settings_api: Any = None,
-                 lora_api: Any = None, static_dir: Optional[str] = None):
+                 lora_api: Any = None, series_api: Any = None, static_dir: Optional[str] = None):
         self.config_api = config_api
         self.character_api = character_api
         self.asset_api = asset_api
@@ -67,6 +67,7 @@ class AppAPI:
         self.skills_api = skills_api
         self.app_settings_api = app_settings_api
         self.lora_api = lora_api
+        self.series_api = series_api
         self.static_dir = Path(static_dir) if static_dir else None
 
     async def handle(self, method: str, path: str, body: Optional[dict] = None) -> Tuple[int, Any]:
@@ -97,6 +98,8 @@ class AppAPI:
             return await self.app_settings_api.handle(method, path, body)
         if clean.startswith("/api/loras") and self.lora_api:
             return await self.lora_api.handle(method, path, body)
+        if clean.startswith("/api/series") and self.series_api:
+            return await self.series_api.handle(method, path, body)
         if clean.startswith("/api/"):
             return 404, {"error": "not found"}
         if method.upper() == "GET" and self.static_dir is not None:

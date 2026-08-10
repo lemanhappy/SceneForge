@@ -37,7 +37,7 @@ from services import (Authorizer, BudgetGuard, ContentModerator, CostEstimator, 
 from server import (AppAPI, AssetModelAPI, BgmAPI, BgmService, CharacterStudioAPI, ConfigAPI, ConfigService,
                     EditAPI, FeaturesAPI, FeaturesService, PreferenceService, ProductionAPI, SfxAPI, SfxService,
                     SkillsAPI, SkillsService, TemplatesAPI, VoiceAPI, VoiceService, AppSettingsAPI,
-                    AppSettingsService, LoraAPI, LoraService, serve)
+                    AppSettingsService, LoraAPI, LoraService, SeriesAPI, SeriesService, serve)
 from editing import VideoEditService
 
 
@@ -120,6 +120,7 @@ def main() -> None:
 
     catalog_database = SQLiteDatabase(state_directory(root) / "sceneforge.db")
     catalog_repository = SQLiteAssetCatalogRepository(catalog_database)
+    series_service = SeriesService(catalog_database, session_index)
     budget = BudgetGuard.from_config(pipeline_cfg)
     moderator = ContentModerator.from_config(pipeline_cfg)
     cost_estimator = CostEstimator.from_config(pipeline_cfg)
@@ -161,7 +162,8 @@ def main() -> None:
         )),
         production_api=ProductionAPI(session_index, service, adapters,
                                      cost_estimator=cost_estimator,
-                                     housekeeping=HousekeepingService()),
+                                     housekeeping=HousekeepingService(),
+                                     series_service=series_service),
         bgm_api=BgmAPI(BgmService(library_dir=args.bgm_dir,
                                   config_paths=["configs/idea2video.yaml", "configs/script2video.yaml"])),
         voice_api=VoiceAPI(VoiceService(config_paths=["configs/idea2video.yaml", "configs/script2video.yaml"],
@@ -175,6 +177,7 @@ def main() -> None:
                                            config_paths=["configs/idea2video.yaml", "configs/script2video.yaml"])),
         app_settings_api=AppSettingsAPI(app_settings_service),
         lora_api=LoraAPI(lora_service),
+        series_api=SeriesAPI(series_service),
         static_dir=str(static_dir),
     )
 

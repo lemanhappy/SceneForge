@@ -20,6 +20,8 @@ from .app_settings_service import AppSettingsService
 from .app_settings_api import AppSettingsAPI
 from .lora_service import LoraService
 from .lora_api import LoraAPI
+from .series_service import SeriesService
+from .series_api import SeriesAPI
 from .app import AppAPI, serve
 
 __all__ = [
@@ -44,6 +46,8 @@ __all__ = [
     "AppSettingsAPI",
     "LoraService",
     "LoraAPI",
+    "SeriesService",
+    "SeriesAPI",
     "AppAPI",
     "serve",
 ]

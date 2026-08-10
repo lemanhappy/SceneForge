@@ -48,12 +48,13 @@ from .artifacts_reader import build_manifest, read_script, read_storyboard, reso
 
 class ProductionAPI:
     def __init__(self, session_index: Any, service: Any, adapters: Any, cost_estimator: Any = None,
-                 housekeeping: Any = None):
+                 housekeeping: Any = None, series_service: Any = None):
         self.session_index = session_index
         self.service = service  # ProductionService
         self.adapters = adapters
         self.cost_estimator = cost_estimator
         self.housekeeping = housekeeping
+        self.series_service = series_service
 
     async def handle(self, method: str, path: str, body: Optional[dict] = None) -> Tuple[int, Any]:
         method = method.upper()
@@ -72,6 +73,26 @@ class ProductionAPI:
                 idea = str(body.get("idea", "") or "").strip()
                 mode = "script" if str(body.get("mode", "") or "") == "script" else "idea"
                 script = str(body.get("script", "") or "").strip()
+                series_id = str(body.get("series_id") or "").strip()
+                prepared_episode = None
+                series = None
+                episode_number = None
+                episode_title = ""
+                episode_outline = ""
+                previous_episode_id = ""
+                if series_id:
+                    if self.series_service is None:
+                        return 400, {"error": "连续短剧功能尚未启用"}
+                    try:
+                        prepared_episode = self.series_service.prepare_episode(series_id, body.get("episode_number"))
+                    except (KeyError, TypeError, ValueError) as exc:
+                        return 400, {"error": str(exc).strip("'")}
+                    series = prepared_episode["series"]
+                    episode_number = prepared_episode["episode_number"]
+                    episode_title = str(body.get("episode_title") or prepared_episode["episode_title"] or "").strip()
+                    episode_outline = str(body.get("episode_outline") or prepared_episode["episode_outline"] or idea).strip()
+                    previous_episode_id = prepared_episode["previous_episode_id"]
+                    idea = idea or episode_outline or episode_title or f"{series['title']} 第 {episode_number} 集"
                 if mode == "script":
                     if not script:
                         return 400, {"error": "script is required in script mode"}
@@ -85,10 +106,15 @@ class ProductionAPI:
                 scenes = [str(x) for x in scenes if str(x).strip()] if isinstance(scenes, list) else []
                 lora_ids = body.get("lora_ids") or []
                 lora_ids = [str(x) for x in lora_ids if str(x).strip()] if isinstance(lora_ids, list) else []
+                if series is not None:
+                    cast = list(dict.fromkeys(list(series.get("character_asset_ids") or []) + cast))
+                    props = list(dict.fromkeys(list(series.get("prop_asset_ids") or []) + props))
+                    scenes = list(dict.fromkeys(list(series.get("scene_asset_ids") or []) + scenes))
+                    lora_ids = list(dict.fromkeys(list(series.get("lora_ids") or []) + lora_ids))
                 # per-video overrides (None when absent -> fall back to global config)
-                tl = body.get("target_language"); tl = None if tl is None else str(tl)
-                asp = body.get("aspect_ratio"); asp = None if asp is None else str(asp)
-                quality_tier = str(body.get("quality_tier") or "balanced")
+                tl = body.get("target_language", (series or {}).get("target_language")); tl = None if tl is None else str(tl)
+                asp = body.get("aspect_ratio", (series or {}).get("aspect_ratio")); asp = None if asp is None else str(asp)
+                quality_tier = str(body.get("quality_tier") or (series or {}).get("quality_tier") or "balanced")
                 if quality_tier not in {"economy", "balanced", "quality"}:
                     return 400, {"error": "quality_tier must be economy, balanced, or quality"}
                 ov = {}
@@ -97,13 +123,13 @@ class ProductionAPI:
                 if "tts_enabled" in body: ov["tts_enabled"] = bool(body.get("tts_enabled"))
                 if body.get("voice"): ov["voice"] = str(body.get("voice"))
                 if body.get("bgm_track"): ov["bgm_track"] = str(body.get("bgm_track"))
-                source_session_id = str(body.get("continuity_source_session_id") or "").strip()
+                source_session_id = previous_episode_id if series_id else str(body.get("continuity_source_session_id") or "").strip()
                 if source_session_id and self.session_index.get(source_session_id) is None:
                     return 400, {"error": "continuity source session does not exist"}
                 start_kwargs = {
                     "user_requirement": str(body.get("user_requirement", "") or ""),
-                    "style": str(body.get("style", "") or ""),
-                    "domain": str(body.get("domain", "") or ""),
+                    "style": str(body.get("style") or (series or {}).get("style") or ""),
+                    "domain": str(body.get("domain") or (series or {}).get("domain") or ""),
                     "character_asset_ids": cast,
                     "mode": mode,
                     "script": script,
@@ -117,6 +143,20 @@ class ProductionAPI:
                 }
                 if source_session_id:
                     start_kwargs["continuity_source_session_id"] = source_session_id
+                if series_id:
+                    start_kwargs.update({
+                        "series_id": series_id,
+                        "episode_number": episode_number,
+                        "episode_title": episode_title,
+                        "episode_outline": episode_outline,
+                        "previous_episode_id": previous_episode_id,
+                        "series_context": {
+                            "title": series.get("title"),
+                            "premise": series.get("premise"),
+                            "episode_duration_sec": series.get("episode_duration_sec"),
+                            "bible": series.get("bible") or {},
+                        },
+                    })
                 rec = self.service.start_topic(idea, **start_kwargs)
                 return 200, rec
 
@@ -516,6 +556,11 @@ class ProductionAPI:
                             "character_asset_ids": list(rec.get("character_asset_ids") or []),
                             "prop_asset_ids": list(rec.get("prop_asset_ids") or []),
                             "scene_asset_ids": list(rec.get("scene_asset_ids") or []),
+                            "series_id": str(rec.get("series_id") or ""),
+                            "series_title": str((rec.get("series_context") or {}).get("title") or ""),
+                            "episode_number": rec.get("episode_number"),
+                            "episode_title": str(rec.get("episode_title") or ""),
+                            "previous_episode_id": str(rec.get("previous_episode_id") or ""),
                             "continuity_source_session_id": str(rec.get("continuity_source_session_id") or ""),
                             "continuity_available": any(
                                 path.is_file()
@@ -629,6 +674,11 @@ class ProductionAPI:
             "provider_route": record.get("provider_route"),
             "quality_tier": record.get("quality_tier", "balanced"),
             "continuity_source_session_id": record.get("continuity_source_session_id", ""),
+            "series_id": record.get("series_id", ""),
+            "episode_number": record.get("episode_number"),
+            "episode_title": record.get("episode_title", ""),
+            "episode_outline": record.get("episode_outline", ""),
+            "previous_episode_id": record.get("previous_episode_id", ""),
             "loras": [
                 {
                     "lora_id": item.get("lora_id"),

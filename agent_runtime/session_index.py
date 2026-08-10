@@ -147,7 +147,7 @@ class SessionIndex:
         return sorted(records, key=lambda item: str(item.get("updated_at") or ""), reverse=True)
 
     @_synchronized
-    def create(self, idea: str = "", user_requirement: str = "", style: str = "", session_id: str | None = None, domain: str = "", character_asset_ids: list | None = None, prop_asset_ids: list | None = None, scene_asset_ids: list | None = None, lora_ids: list | None = None, lora_bindings: list | None = None, mode: str = "idea", script: str = "", target_language: str | None = None, aspect_ratio: str | None = None, overrides: dict | None = None, quality_tier: str = "balanced", config_snapshot: dict | None = None, continuity_source_session_id: str | None = None) -> dict[str, Any]:
+    def create(self, idea: str = "", user_requirement: str = "", style: str = "", session_id: str | None = None, domain: str = "", character_asset_ids: list | None = None, prop_asset_ids: list | None = None, scene_asset_ids: list | None = None, lora_ids: list | None = None, lora_bindings: list | None = None, mode: str = "idea", script: str = "", target_language: str | None = None, aspect_ratio: str | None = None, overrides: dict | None = None, quality_tier: str = "balanced", config_snapshot: dict | None = None, continuity_source_session_id: str | None = None, series_id: str | None = None, episode_number: int | None = None, episode_title: str = "", episode_outline: str = "", previous_episode_id: str | None = None, series_context: dict | None = None) -> dict[str, Any]:
         data = self.load()
         sessions = data.setdefault("sessions", {})
         final_id = self._normalize_session_id(session_id) if session_id else self._new_session_id(idea or user_requirement or "sceneforge", sessions)
@@ -181,6 +181,12 @@ class SessionIndex:
             "quality_tier": quality_tier if quality_tier in {"economy", "balanced", "quality"} else "balanced",
             "config_snapshot": dict(config_snapshot or {}),
             "continuity_source_session_id": str(continuity_source_session_id or ""),
+            "series_id": str(series_id or ""),
+            "episode_number": int(episode_number) if episode_number is not None else None,
+            "episode_title": str(episode_title or ""),
+            "episode_outline": str(episode_outline or ""),
+            "previous_episode_id": str(previous_episode_id or ""),
+            "series_context": dict(series_context or {}),
             "stage": "created",
             "summary": "",
             "stale": {key: False for key in STALE_KEYS},
@@ -507,6 +513,12 @@ class SessionIndex:
         item.setdefault("lora_bindings", [])
         item.setdefault("config_snapshot", {})
         item.setdefault("continuity_source_session_id", "")
+        item.setdefault("series_id", "")
+        item.setdefault("episode_number", None)
+        item.setdefault("episode_title", "")
+        item.setdefault("episode_outline", "")
+        item.setdefault("previous_episode_id", "")
+        item.setdefault("series_context", {})
         return item
 
     def _new_session_id(self, source: str, sessions: dict[str, Any]) -> str:

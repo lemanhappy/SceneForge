@@ -10,8 +10,8 @@ class SQLiteMigrationTests(unittest.TestCase):
     def test_fresh_database_and_repeat_migration(self):
         with tempfile.TemporaryDirectory() as tmp:
             database = SQLiteDatabase(Path(tmp) / "data" / "sceneforge.db")
-            self.assertEqual(database.migrate(), 6)
-            self.assertEqual(database.migrate(), 6)
+            self.assertEqual(database.migrate(), 7)
+            self.assertEqual(database.migrate(), 7)
             with database.connection() as connection:
                 tables = {
                     row["name"]
@@ -21,6 +21,9 @@ class SQLiteMigrationTests(unittest.TestCase):
                 foreign_keys = connection.execute("PRAGMA foreign_keys").fetchone()[0]
                 job_columns = {
                     row["name"] for row in connection.execute("PRAGMA table_info(generation_jobs)")
+                }
+                project_columns = {
+                    row["name"] for row in connection.execute("PRAGMA table_info(projects)").fetchall()
                 }
             self.assertTrue(
                 {
@@ -43,6 +46,10 @@ class SQLiteMigrationTests(unittest.TestCase):
             self.assertEqual(foreign_keys, 1)
             self.assertTrue(
                 {"remote_provider", "remote_metadata_json", "remote_artifact_path"} <= job_columns
+            )
+            self.assertIn("series", tables)
+            self.assertTrue(
+                {"series_id", "episode_number", "episode_title", "previous_episode_id"} <= project_columns
             )
 
     def test_changed_applied_migration_is_rejected(self):

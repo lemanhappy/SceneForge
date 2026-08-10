@@ -177,8 +177,9 @@ class SQLiteSessionStateStore(SessionStateStore):
                 """
                 INSERT INTO projects(
                     project_id, legacy_session_id, working_dir, mode, title,
-                    stage, revision, record_json, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+                    stage, revision, record_json, created_at, updated_at,
+                    series_id, episode_number, episode_title, previous_episode_id
+                ) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(project_id) DO UPDATE SET
                     legacy_session_id = excluded.legacy_session_id,
                     working_dir = excluded.working_dir,
@@ -188,10 +189,18 @@ class SQLiteSessionStateStore(SessionStateStore):
                     record_json = excluded.record_json,
                     created_at = excluded.created_at,
                     updated_at = excluded.updated_at,
+                    series_id = excluded.series_id,
+                    episode_number = excluded.episode_number,
+                    episode_title = excluded.episode_title,
+                    previous_episode_id = excluded.previous_episode_id,
                     revision = projects.revision + 1
                 WHERE projects.record_json <> excluded.record_json
                    OR projects.working_dir <> excluded.working_dir
                    OR projects.stage <> excluded.stage
+                   OR projects.series_id IS NOT excluded.series_id
+                   OR projects.episode_number IS NOT excluded.episode_number
+                   OR projects.episode_title <> excluded.episode_title
+                   OR projects.previous_episode_id IS NOT excluded.previous_episode_id
                    OR projects.updated_at <> excluded.updated_at
                 """,
                 (
@@ -204,6 +213,10 @@ class SQLiteSessionStateStore(SessionStateStore):
                     record_json,
                     created_at,
                     updated_at,
+                    (str(record.get("series_id")) if record.get("series_id") else None),
+                    (int(record["episode_number"]) if record.get("episode_number") is not None else None),
+                    str(record.get("episode_title") or ""),
+                    (str(record.get("previous_episode_id")) if record.get("previous_episode_id") else None),
                 ),
             )
             connection.execute("DELETE FROM reviews WHERE project_id = ?", (session_id,))

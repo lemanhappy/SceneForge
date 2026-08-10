@@ -37,7 +37,7 @@ const filteredSessions = computed(() => {
   return sessions.value.filter((item) => {
     if (historyFilter.value === 'complete' && !isComplete(item)) return false
     if (historyFilter.value === 'active' && isComplete(item)) return false
-    return !query || `${item.idea || ''} ${item.session_id || ''}`.toLocaleLowerCase().includes(query)
+    return !query || `${item.idea || ''} ${item.session_id || ''} ${item.series_title || ''} ${item.episode_title || ''}`.toLocaleLowerCase().includes(query)
   })
 })
 
@@ -75,6 +75,12 @@ function formatUpdated(value) {
 function select(sid) {
   activeSid.value = sid
   if (props.historyMode) emit('history-selection', sid)
+}
+function projectTitle(session) {
+  if (session.series_id) {
+    return `${session.series_title || '连续短剧'} · 第 ${session.episode_number || '?'} 集${session.episode_title ? '：' + session.episode_title : ''}`
+  }
+  return session.idea || ('未命名创作 ' + session.session_id)
 }
 function onCreated(sid) {
   activeSid.value = sid
@@ -161,7 +167,7 @@ async function cleanupAll() {
                 <Clock3 v-else :size="18" />
               </span>
               <span class="history-project-copy">
-                <strong>{{ session.idea || ('未命名创作 ' + session.session_id) }}</strong>
+                <strong>{{ projectTitle(session) }}</strong>
                 <small>{{ session.session_id }}</small>
               </span>
             </button>

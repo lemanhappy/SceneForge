@@ -220,7 +220,7 @@ async function deleteLora(item) {
       </div>
 
       <section class="panel lora-editor">
-        <div class="lora-editor-head"><div><h2>{{ editingLoraId ? '编辑 LoRA' : '添加 LoRA' }}</h2><span>保存后可在“新建创作”的 LoRA 模型中选择。</span></div><button v-if="editingLoraId" class="ghost" type="button" @click="resetLoraForm">取消编辑</button></div>
+        <div class="lora-editor-head"><div><h2>{{ editingLoraId ? '编辑 LoRA' : '添加 LoRA' }}</h2><span>保存后可在“单条视频”的 LoRA 模型中选择。</span></div><button v-if="editingLoraId" class="ghost" type="button" @click="resetLoraForm">取消编辑</button></div>
         <div class="grid2">
           <div><label>LoRA ID</label><input v-model="loraForm.lora_id" :disabled="!!editingLoraId" placeholder="wangyunbao_lora" /></div>
           <div><label>显示名称</label><input v-model="loraForm.display_name" placeholder="王云宝角色 LoRA" /></div>
@@ -234,7 +234,7 @@ async function deleteLora(item) {
           <div><label>标签（逗号分隔）</label><input v-model="loraForm.tags" placeholder="角色, 写实, 男性" /></div>
         </div>
         <label>备注</label><textarea v-model="loraForm.notes" class="compact-textarea" placeholder="适用画风、建议权重、版本说明"></textarea>
-        <label class="toggle-line"><input v-model="loraForm.enabled" type="checkbox" />允许在新建创作中选择</label>
+        <label class="toggle-line"><input v-model="loraForm.enabled" type="checkbox" />允许在单条视频中选择</label>
         <div class="row lora-form-actions"><button class="act" type="button" @click="saveLora"><Plus v-if="!editingLoraId" :size="14" />{{ editingLoraId ? '保存修改' : '加入资源库' }}</button><span class="muted">{{ loraMsg }}</span></div>
       </section>
 

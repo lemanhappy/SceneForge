@@ -5,7 +5,22 @@ import { api, watchJob } from '../lib/api.js'
 import { confirmModal } from '../lib/confirm.js'
 import JobProgress from './JobProgress.vue'
 
-const emit = defineEmits(['created', 'sessions-changed'])
+const props = defineProps({
+  seriesContext: { type: Object, default: null },
+})
+const emit = defineEmits(['created', 'sessions-changed', 'cancel'])
+const isSeriesEpisode = computed(() => !!(props.seriesContext && props.seriesContext.series_id))
+
+function isSeriesAssetLocked(kind, assetId) {
+  if (!isSeriesEpisode.value) return false
+  const keys = {
+    character: 'character_asset_ids',
+    prop: 'prop_asset_ids',
+    scene: 'scene_asset_ids',
+    lora: 'lora_ids',
+  }
+  return (props.seriesContext[keys[kind]] || []).includes(assetId)
+}
 
 const mode = ref('idea')
 const idea = ref('')
@@ -55,6 +70,7 @@ const msg = ref('')
 const progress = ref(null)   // null = not submitting
 const activeJobId = ref('')
 const stopping = ref(false)
+const seriesContextApplied = ref(false)
 const audioSrc = ref('')
 const audio = ref(null)
 
@@ -102,6 +118,38 @@ async function loadAssetModels() {
     const valid = new Set(loraModels.value.map((item) => item.lora_id))
     loraSel.value = Object.fromEntries(Object.entries(loraSel.value).filter(([id, selected]) => selected && valid.has(id)))
   }
+  applySeriesAssetSelections()
+}
+
+function applySeriesAssetSelections() {
+  const context = props.seriesContext || {}
+  const selectKnown = (selection, models, ids, idKey = 'asset_id') => {
+    const known = new Set(models.value.map((item) => item[idKey]))
+    selection.value = {
+      ...selection.value,
+      ...Object.fromEntries((ids || []).filter((id) => known.has(id)).map((id) => [id, true])),
+    }
+  }
+  selectKnown(castSel, cast, context.character_asset_ids)
+  selectKnown(propSel, propModels, context.prop_asset_ids)
+  selectKnown(sceneSel, sceneModels, context.scene_asset_ids)
+  selectKnown(loraSel, loraModels, context.lora_ids, 'lora_id')
+}
+
+function applySeriesContext() {
+  const context = props.seriesContext
+  if (!context || seriesContextApplied.value) return
+  title.value = context.episode_title || `第 ${context.episode_number} 集`
+  idea.value = context.episode_outline || ''
+  style.value = context.style || style.value
+  lang.value = context.target_language || lang.value
+  aspect.value = context.aspect_ratio || aspect.value
+  qualityTier.value = context.quality_tier || qualityTier.value
+  domain.value = context.domain || domain.value
+  const durationHint = context.episode_duration_sec ? `本集目标时长约 ${context.episode_duration_sec} 秒。` : ''
+  if (durationHint && !req.value.includes(durationHint)) req.value = [durationHint, req.value].filter(Boolean).join('\n')
+  applySeriesAssetSelections()
+  seriesContextApplied.value = true
 }
 async function loadContinuitySources() {
   try {
@@ -131,8 +179,10 @@ async function loadTemplates() {
   try {
     const t = await api('GET', '/api/templates')
     const lu = t.last_used || {}
-    if (lu.style && !style.value) style.value = lu.style
-    if (lu.user_requirement && !req.value) req.value = lu.user_requirement
+    if (!isSeriesEpisode.value) {
+      if (lu.style && !style.value) style.value = lu.style
+      if (lu.user_requirement && !req.value) req.value = lu.user_requirement
+    }
     templates.value = t.templates || []
   } catch (e) { /* ignore */ }
 }
@@ -158,8 +208,11 @@ async function loadDefaults() {
   } catch (e) {}
   try { const b = await api('GET', '/api/bgm'); bgmTracks.value = b.tracks || [] } catch (e) {}
 }
-onMounted(() => { loadDomains(); loadTemplates(); loadDefaults(); loadContinuitySources(); loadQualityProfiles() })
-onActivated(() => { loadAssetModels(); loadContinuitySources() })
+onMounted(async () => {
+  await Promise.all([loadDomains(), loadTemplates(), loadDefaults(), loadContinuitySources(), loadQualityProfiles(), loadAssetModels()])
+  applySeriesContext()
+})
+onActivated(async () => { await loadAssetModels(); loadContinuitySources() })
 
 function applyTemplate() {
   if (tmplIdx.value === '') return
@@ -202,6 +255,10 @@ async function submit() {
       continuity_source_session_id: continuitySourceId.value || undefined,
       tts_enabled: tts.value, subtitle_enabled: sub.value, subtitle_burn_in: sub.value,
       voice: tts.value ? voice.value : '', bgm_track: bgm.value,
+      series_id: props.seriesContext && props.seriesContext.series_id,
+      episode_number: props.seriesContext && props.seriesContext.episode_number,
+      episode_title: isSeriesEpisode.value ? title.value.trim() : undefined,
+      episode_outline: isSeriesEpisode.value ? idea.value.trim() : undefined,
     })
     activeJobId.value = rec.job_id || ''
     const job = await watchJob(rec.job_id, (prog) => { progress.value = prog })
@@ -239,7 +296,11 @@ async function stopCreation() {
   <div>
     <div class="cre-topbar">
       <div class="cre-projectbar">
-        <div class="cre-project-copy"><div class="cre-project-title">新建创作</div><div class="cre-project-meta">设置故事、资产和生成规格</div></div>
+        <div class="cre-project-copy">
+          <div class="cre-project-title">{{ isSeriesEpisode ? `${props.seriesContext.series_title} · 第 ${props.seriesContext.episode_number} 集` : '新建单条视频' }}</div>
+          <div class="cre-project-meta">{{ isSeriesEpisode ? '编写本集内容，作品设定和上一集状态将自动继承' : '设置故事、资产和生成规格' }}</div>
+        </div>
+        <button v-if="isSeriesEpisode" class="ghost" type="button" @click="emit('cancel')">返回剧集列表</button>
       </div>
     </div>
     <div class="cre-scroll">
@@ -247,6 +308,11 @@ async function stopCreation() {
     <div class="row" style="gap:6px;margin-bottom:12px">
       <button class="ghost mode-btn" :class="{ active: mode === 'idea' }" @click="mode = 'idea'">主题生成</button>
       <button class="ghost mode-btn" :class="{ active: mode === 'script' }" @click="mode = 'script'">导入剧本</button>
+    </div>
+
+    <div v-if="isSeriesEpisode" class="guided-field series-episode-title-field">
+      <label for="series-episode-title">本集标题</label>
+      <input id="series-episode-title" v-model="title" placeholder="例如：失踪的钥匙" />
     </div>
 
     <div v-if="mode === 'idea'" class="guided-field">
@@ -264,7 +330,7 @@ async function stopCreation() {
         placeholder="用 1-3 句话描述故事核心"></textarea>
     </div>
     <div v-else class="script-import-fields">
-      <div class="guided-field">
+      <div v-if="!isSeriesEpisode" class="guided-field">
         <div class="field-label-line">
           <label for="creation-title">标题（可选）</label>
           <button class="field-help-trigger" type="button" aria-label="查看标题填写说明" aria-describedby="creation-title-tip"
@@ -327,7 +393,7 @@ async function stopCreation() {
     </div>
 
     <div class="setbox">
-      <div class="setbox-h">本片设置 <span class="muted" style="font-weight:400">（随这条视频，不影响全局）</span></div>
+      <div class="setbox-h">{{ isSeriesEpisode ? '本集设置' : '本片设置' }} <span class="muted" style="font-weight:400">（只影响当前{{ isSeriesEpisode ? '剧集' : '视频' }}）</span></div>
       <div class="pgrid">
         <div class="pfield"><label>语言</label>
           <select v-model="lang" @change="autoVoice"><option value="zh-CN">中文</option><option value="en">英文 English</option><option value="">跟随剧本</option></select>
@@ -353,7 +419,7 @@ async function stopCreation() {
             </optgroup>
           </select>
         </div>
-        <div class="pfield"><label for="continuity-source">延续项目</label>
+        <div v-if="!isSeriesEpisode" class="pfield"><label for="continuity-source">延续项目</label>
           <select id="continuity-source" v-model="continuitySourceId" @change="applyContinuitySource">
             <option value="">不继承上一集</option>
             <option v-for="item in continuitySources" :key="item.session_id" :value="item.session_id">
@@ -389,12 +455,13 @@ async function stopCreation() {
     </div>
 
     <div class="asset-pickers">
+      <div v-if="isSeriesEpisode" class="series-assets-note">作品固定资产已锁定；本集仍可添加临时资产。</div>
       <div class="asset-pick-row">
         <label>角色模型</label>
         <div class="row asset-chips">
           <span v-if="!cast.length" class="muted">暂无角色模型</span>
-          <span v-for="c in cast" :key="c.asset_id" class="chip" :class="{ on: castSel[c.asset_id] }">
-            <input type="checkbox" :id="'cast_' + c.asset_id" v-model="castSel[c.asset_id]" />
+          <span v-for="c in cast" :key="c.asset_id" class="chip" :class="{ on: castSel[c.asset_id], locked: isSeriesAssetLocked('character', c.asset_id) }">
+            <input type="checkbox" :id="'cast_' + c.asset_id" v-model="castSel[c.asset_id]" :disabled="isSeriesAssetLocked('character', c.asset_id)" />
             <label :for="'cast_' + c.asset_id">{{ c.display_name || c.asset_id }}</label>
           </span>
         </div>
@@ -403,8 +470,8 @@ async function stopCreation() {
         <label>道具模型</label>
         <div class="row asset-chips">
           <span v-if="!propModels.length" class="muted">暂无道具模型</span>
-          <span v-for="item in propModels" :key="item.asset_id" class="chip" :class="{ on: propSel[item.asset_id] }">
-            <input type="checkbox" :id="'prop_' + item.asset_id" v-model="propSel[item.asset_id]" />
+          <span v-for="item in propModels" :key="item.asset_id" class="chip" :class="{ on: propSel[item.asset_id], locked: isSeriesAssetLocked('prop', item.asset_id) }">
+            <input type="checkbox" :id="'prop_' + item.asset_id" v-model="propSel[item.asset_id]" :disabled="isSeriesAssetLocked('prop', item.asset_id)" />
             <label :for="'prop_' + item.asset_id">{{ item.display_name }}</label>
           </span>
         </div>
@@ -413,8 +480,8 @@ async function stopCreation() {
         <label>场景模型</label>
         <div class="row asset-chips">
           <span v-if="!sceneModels.length" class="muted">暂无场景模型</span>
-          <span v-for="item in sceneModels" :key="item.asset_id" class="chip" :class="{ on: sceneSel[item.asset_id] }">
-            <input type="checkbox" :id="'scene_' + item.asset_id" v-model="sceneSel[item.asset_id]" />
+          <span v-for="item in sceneModels" :key="item.asset_id" class="chip" :class="{ on: sceneSel[item.asset_id], locked: isSeriesAssetLocked('scene', item.asset_id) }">
+            <input type="checkbox" :id="'scene_' + item.asset_id" v-model="sceneSel[item.asset_id]" :disabled="isSeriesAssetLocked('scene', item.asset_id)" />
             <label :for="'scene_' + item.asset_id">{{ item.display_name }}</label>
           </span>
         </div>
@@ -423,9 +490,9 @@ async function stopCreation() {
         <label>LoRA 模型（可选）</label>
         <div class="row asset-chips">
           <span v-if="!loraModels.length" class="muted">暂无可用 LoRA，可在 Skill 市场中添加</span>
-          <span v-for="item in loraModels" :key="item.lora_id" class="chip" :class="{ on: loraSel[item.lora_id] }"
+          <span v-for="item in loraModels" :key="item.lora_id" class="chip" :class="{ on: loraSel[item.lora_id], locked: isSeriesAssetLocked('lora', item.lora_id) }"
             :title="item.application_mode === 'native' ? '需要当前图像提供商支持原生 LoRA' : '兼容模式：仅把触发词加入图像提示词'">
-            <input type="checkbox" :id="'lora_' + item.lora_id" v-model="loraSel[item.lora_id]" />
+            <input type="checkbox" :id="'lora_' + item.lora_id" v-model="loraSel[item.lora_id]" :disabled="isSeriesAssetLocked('lora', item.lora_id)" />
             <label :for="'lora_' + item.lora_id">{{ item.display_name }}</label>
             <small>{{ item.application_mode === 'native' ? '原生' : '触发词' }}</small>
           </span>

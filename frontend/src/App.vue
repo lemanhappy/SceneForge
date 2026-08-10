@@ -1,7 +1,8 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { Boxes, ChevronRight, Clapperboard, FilePlus2, History, Palette, Search, Settings as SettingsIcon, WandSparkles } from '@lucide/vue'
+import { Boxes, ChevronRight, Clapperboard, History, Palette, Search, Settings as SettingsIcon, WandSparkles } from '@lucide/vue'
 import Production from './views/Production.vue'
+import Creation from './views/Creation.vue'
 import AssetModels from './views/AssetModels.vue'
 import Skills from './views/Skills.vue'
 import AutoPost from './views/AutoPost.vue'
@@ -13,7 +14,7 @@ import { stageLabel } from './lib/stages.js'
 import { applyTheme } from './lib/theme.js'
 
 const TABS = [
-  { key: 'production', icon: FilePlus2, label: '新建创作', comp: Production, props: { historyMode: false } },
+  { key: 'creation', icon: Clapperboard, label: '新建创作', comp: Creation },
   { key: 'history', icon: History, label: '历史创作', comp: Production, props: { historyMode: true } },
   { key: 'assets', icon: Boxes, label: '资产模型', comp: AssetModels },
   { key: 'skills', icon: Palette, label: 'Skill 市场', comp: Skills },
@@ -21,7 +22,7 @@ const TABS = [
 ]
 const BOTTOM = [{ key: 'config', icon: SettingsIcon, label: '设置', comp: Settings }]
 const ALL = [...TABS, ...BOTTOM]
-const active = ref('production')
+const active = ref('creation')
 const selectedHistorySid = ref(null)
 const createRequestKey = ref(0)
 const sidebarSessions = ref([])
@@ -29,7 +30,7 @@ const sidebarQuery = ref('')
 const sidebarListMsg = ref('加载中…')
 const current = computed(() => ALL.find((t) => t.key === active.value))
 const currentProps = computed(() => {
-  if (active.value === 'production') return { ...current.value.props, resetKey: createRequestKey.value }
+  if (active.value === 'creation') return { ...current.value.props, resetKey: createRequestKey.value }
   if (active.value === 'history') return { ...current.value.props, selectedSid: selectedHistorySid.value }
   return current.value.props || {}
 })
@@ -56,7 +57,7 @@ onMounted(() => {
 })
 
 function activateTab(key) {
-  if (key === 'production') createRequestKey.value++
+  if (key === 'creation') createRequestKey.value++
   if (key === 'history') selectedHistorySid.value = null
   active.value = key
 }
@@ -66,6 +67,15 @@ function openHistoryProject(sid) {
 }
 function syncHistorySelection(sid) {
   selectedHistorySid.value = sid || null
+}
+function sidebarTitle(session) {
+  if (session.series_id) {
+    const series = session.series_title || '连续短剧'
+    const number = session.episode_number ? `第${session.episode_number}集` : '剧集'
+    const title = session.episode_title ? `：${session.episode_title}` : ''
+    return `${series} · ${number}${title}`
+  }
+  return session.idea || ('未命名创作 ' + session.session_id)
 }
 </script>
 
@@ -94,10 +104,10 @@ function syncHistorySelection(sid) {
           <div v-else-if="!filteredSidebarSessions.length" class="side-history-empty">没有匹配的创作</div>
           <button v-for="session in filteredSidebarSessions" :key="session.session_id" type="button" class="side-project-item"
             :class="{ active: active === 'history' && selectedHistorySid === session.session_id }"
-            :title="session.idea || session.session_id" @click="openHistoryProject(session.session_id)">
+            :title="sidebarTitle(session)" @click="openHistoryProject(session.session_id)">
             <span class="side-project-icon"><Clapperboard :size="14" /></span>
             <span class="side-project-copy">
-              <strong>{{ session.idea || ('未命名创作 ' + session.session_id) }}</strong>
+              <strong>{{ sidebarTitle(session) }}</strong>
               <small>{{ stageLabel(session) }}</small>
             </span>
           </button>
@@ -110,8 +120,8 @@ function syncHistorySelection(sid) {
       </nav>
       <div class="side-foot">本地控制台 · 127.0.0.1</div>
     </aside>
-    <main class="content" :class="{ wide: current.comp === Production }">
-      <h1 v-if="current.comp !== Production" class="page-title">{{ current.label }}</h1>
+    <main class="content" :class="{ wide: current.comp === Production || current.comp === Creation }">
+      <h1 v-if="current.comp !== Production && current.comp !== Creation" class="page-title">{{ current.label }}</h1>
       <!-- keep each view alive so in-flight state (polling, forms) survives tab switches -->
       <keep-alive>
         <component :is="current.comp" v-bind="currentProps" :key="current.key"
