@@ -1,6 +1,5 @@
 import logging
 import os
-import shutil
 import subprocess
 from pathlib import Path
 from typing import Callable, List, Optional, Sequence
@@ -11,27 +10,15 @@ logger = logging.getLogger(__name__)
 
 
 def probe_audio_duration(path: str) -> float:
-    """Real duration of an audio file in seconds, via moviepy (imported lazily so
-    the rest of the module stays importable without a media backend)."""
-    from moviepy import AudioFileClip
+    from utils.media import probe_media_duration
 
-    clip = AudioFileClip(path)
-    try:
-        return float(clip.duration)
-    finally:
-        clip.close()
+    return probe_media_duration(path)
 
 
 def _ffmpeg_exe() -> Optional[str]:
-    exe = shutil.which("ffmpeg")
-    if exe:
-        return exe
-    try:  # moviepy ships imageio-ffmpeg
-        import imageio_ffmpeg
+    from utils.media import ffmpeg_executable
 
-        return imageio_ffmpeg.get_ffmpeg_exe()
-    except Exception:
-        return None
+    return ffmpeg_executable()
 
 
 def build_voiceover_filter(clips: Sequence[VoiceClip], mix_with_original: bool) -> str:

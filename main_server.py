@@ -39,6 +39,8 @@ from server import (AppAPI, AssetModelAPI, BgmAPI, BgmService, CharacterStudioAP
                     SkillsAPI, SkillsService, TemplatesAPI, VoiceAPI, VoiceService, AppSettingsAPI,
                     AppSettingsService, LoraAPI, LoraService, SeriesAPI, SeriesService, serve)
 from editing import VideoEditService
+from services.database_maintenance import prepare_database_startup
+from utils.media import ffmpeg_executable
 
 
 def _static_dir(base: Path) -> Path:
@@ -105,7 +107,12 @@ def main() -> None:
     registry_path = Path(args.registry)
     if not registry_path.is_absolute():
         registry_path = root / registry_path
-    session_index = create_session_index(root, backend=args.session_backend)
+    database_path = state_directory(root) / "sceneforge.db"
+    if args.session_backend == "sqlite":
+        backup = prepare_database_startup(database_path, state_directory(root) / "backups")
+        if backup:
+            print(f"Database backup: {backup}")
+    session_index = create_session_index(root, backend=args.session_backend, database_path=database_path)
     app_settings_service = AppSettingsService(root, session_index=session_index)
     adapters = SceneForgeAdapters(root, session_index)
 
@@ -118,7 +125,7 @@ def main() -> None:
         except Exception:
             pipeline_cfg = {}
 
-    catalog_database = SQLiteDatabase(state_directory(root) / "sceneforge.db")
+    catalog_database = SQLiteDatabase(database_path)
     catalog_repository = SQLiteAssetCatalogRepository(catalog_database)
     series_service = SeriesService(catalog_database, session_index)
     budget = BudgetGuard.from_config(pipeline_cfg)
@@ -179,6 +186,7 @@ def main() -> None:
         lora_api=LoraAPI(lora_service),
         series_api=SeriesAPI(series_service),
         static_dir=str(static_dir),
+        health_check=lambda: _health_status(catalog_database),
     )
 
     # Feishu inbound webhook (mounted on the same server at /feishu/events) — only
@@ -208,6 +216,21 @@ def main() -> None:
     finally:
         if hasattr(runner, "stop"):
             runner.stop()
+
+
+def _health_status(database: SQLiteDatabase) -> dict:
+    try:
+        database_ok, _ = database.integrity_check(quick=True)
+    except Exception:
+        database_ok = False
+    components = {
+        "database": "ok" if database_ok else "error",
+        "ffmpeg": "ok" if ffmpeg_executable() else "missing",
+    }
+    return {
+        "status": "ok" if all(value == "ok" for value in components.values()) else "error",
+        "components": components,
+    }
 
 
 if __name__ == "__main__":

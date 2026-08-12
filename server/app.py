@@ -11,12 +11,22 @@ from __future__ import annotations
 
 import hmac
 import json
+import logging
 import mimetypes
 from pathlib import Path
 from typing import Any, Optional, Tuple
 from urllib.parse import parse_qs, urlsplit
 
-from .http_security import allowed_cors_origin, send_cors_headers as _send_cors_headers
+from .http_security import (
+    allowed_cors_origin,
+    query_token_allowed,
+    request_body_limit,
+    request_origin_allowed,
+    send_cors_headers as _send_cors_headers,
+    send_security_headers as _send_security_headers,
+)
+
+logger = logging.getLogger(__name__)
 
 # Web-asset MIME overrides (Windows registry maps .js -> text/plain, which makes
 # browsers refuse to run ES modules from the built Vue app).
@@ -53,7 +63,8 @@ class AppAPI:
                  production_api: Any = None, bgm_api: Any = None, voice_api: Any = None,
                  features_api: Any = None, sfx_api: Any = None, templates_api: Any = None,
                  edit_api: Any = None, skills_api: Any = None, app_settings_api: Any = None,
-                 lora_api: Any = None, series_api: Any = None, static_dir: Optional[str] = None):
+                 lora_api: Any = None, series_api: Any = None, static_dir: Optional[str] = None,
+                 health_check: Any = None):
         self.config_api = config_api
         self.character_api = character_api
         self.asset_api = asset_api
@@ -69,9 +80,13 @@ class AppAPI:
         self.lora_api = lora_api
         self.series_api = series_api
         self.static_dir = Path(static_dir) if static_dir else None
+        self.health_check = health_check
 
     async def handle(self, method: str, path: str, body: Optional[dict] = None) -> Tuple[int, Any]:
         clean = path.split("?")[0]
+        if clean == "/api/health" and method.upper() == "GET":
+            result = self.health_check() if self.health_check else {"status": "ok"}
+            return (200 if result.get("status") == "ok" else 503), result
         if clean.startswith("/api/config") and self.config_api:
             return await self.config_api.handle(method, path, body)
         if clean.startswith("/api/characters") and self.character_api:
@@ -102,7 +117,7 @@ class AppAPI:
             return await self.series_api.handle(method, path, body)
         if clean.startswith("/api/"):
             return 404, {"error": "not found"}
-        if method.upper() == "GET" and self.static_dir is not None:
+        if method.upper() in {"GET", "HEAD"} and self.static_dir is not None:
             return self._static(clean)
         return 404, {"error": "not found"}
 
@@ -150,6 +165,7 @@ def _sse_stream(handler, api, status_path: str) -> None:  # pragma: no cover - s
         handler.send_header("Content-Type", "text/event-stream; charset=utf-8")
         handler.send_header("Cache-Control", "no-cache")
         _send_cors_headers(handler)
+        _send_security_headers(handler)
         handler.send_header("X-Accel-Buffering", "no")  # disable proxy buffering
         handler.end_headers()
     except (BrokenPipeError, ConnectionError, OSError):
@@ -198,6 +214,76 @@ def _write_body(handler: Any, payload: bytes) -> bool:  # pragma: no cover - soc
         return False
 
 
+def parse_byte_range(value: str, size: int) -> Optional[Tuple[int, int]]:
+    """Parse one HTTP byte range; return inclusive start/end offsets."""
+    if not value:
+        return None
+    if size < 0 or not value.startswith("bytes=") or "," in value:
+        raise ValueError("invalid range")
+    spec = value[6:].strip()
+    if "-" not in spec:
+        raise ValueError("invalid range")
+    start_text, end_text = spec.split("-", 1)
+    try:
+        if not start_text:
+            suffix = int(end_text)
+            if suffix <= 0 or size == 0:
+                raise ValueError
+            return max(0, size - suffix), size - 1
+        start = int(start_text)
+        end = int(end_text) if end_text else size - 1
+    except (TypeError, ValueError) as exc:
+        raise ValueError("invalid range") from exc
+    if start < 0 or start >= size or end < start:
+        raise ValueError("range not satisfiable")
+    return start, min(end, size - 1)
+
+
+def _serve_file(handler: Any, result: dict) -> bool:  # pragma: no cover - socket streaming
+    path = Path(result["_file"])
+    try:
+        size = path.stat().st_size
+        selected = parse_byte_range(str(handler.headers.get("Range", "") or ""), size)
+    except OSError:
+        return False
+    except ValueError:
+        handler.send_response(416)
+        handler.send_header("Content-Range", f"bytes */{size}")
+        handler.send_header("Content-Length", "0")
+        _send_cors_headers(handler)
+        _send_security_headers(handler)
+        handler.end_headers()
+        return True
+
+    start, end = selected if selected is not None else (0, max(0, size - 1))
+    length = 0 if size == 0 else end - start + 1
+    handler.send_response(206 if selected is not None else 200)
+    handler.send_header("Content-Type", result.get("_content_type", "application/octet-stream"))
+    handler.send_header("Content-Length", str(length))
+    handler.send_header("Accept-Ranges", "bytes")
+    if selected is not None:
+        handler.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+    _send_cors_headers(handler)
+    _send_security_headers(handler)
+    if result.get("_no_cache"):
+        handler.send_header("Cache-Control", "no-cache, must-revalidate")
+    handler.end_headers()
+    if handler.command == "HEAD" or not length:
+        return True
+    try:
+        with path.open("rb") as source:
+            source.seek(start)
+            remaining = length
+            while remaining:
+                chunk = source.read(min(1024 * 1024, remaining))
+                if not chunk or not _write_body(handler, chunk):
+                    break
+                remaining -= len(chunk)
+        return True
+    except OSError:
+        return True
+
+
 def serve(api: Any, host: str = "127.0.0.1", port: int = 8770,
           feishu_handler: Any = None, feishu_path: str = "/feishu/events",
           auth_token: Optional[str] = None) -> None:  # pragma: no cover - socket binding
@@ -213,26 +299,60 @@ def serve(api: Any, host: str = "127.0.0.1", port: int = 8770,
     import asyncio
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+    def _json_response(handler: BaseHTTPRequestHandler, status: int, result: Any) -> None:
+        payload = json.dumps(result, ensure_ascii=False).encode("utf-8")
+        handler.send_response(status)
+        handler.send_header("Content-Type", "application/json; charset=utf-8")
+        handler.send_header("Content-Length", str(len(payload)))
+        _send_cors_headers(handler)
+        _send_security_headers(handler)
+        handler.end_headers()
+        if handler.command != "HEAD":
+            _write_body(handler, payload)
+
     def _respond(handler: BaseHTTPRequestHandler) -> None:
-        length = int(handler.headers.get("Content-Length", 0) or 0)
-        raw = handler.rfile.read(length) if length else b""
         clean = handler.path.split("?")[0]
+        headers = {k: v for k, v in handler.headers.items()}
 
         # Auth gate for /api/* (static UI + Feishu webhook are exempt — the UI must
         # load to enter the token, and Feishu has its own signature).
         query = parse_qs(urlsplit(handler.path).query)
         if clean.startswith("/api/") and not authorized(
-            {k: v for k, v in handler.headers.items()},
+            headers,
             auth_token,
-            query.get("token", [""])[0],
+            query.get("token", [""])[0] if query_token_allowed(handler.command, clean) else "",
         ):
-            payload = json.dumps({"error": "unauthorized"}).encode("utf-8")
-            handler.send_response(401)
-            handler.send_header("Content-Type", "application/json; charset=utf-8")
-            handler.send_header("Content-Length", str(len(payload)))
-            _send_cors_headers(handler)
-            handler.end_headers()
-            _write_body(handler, payload)
+            _json_response(handler, 401, {"error": "unauthorized"})
+            return
+
+        if clean.startswith("/api/") and not request_origin_allowed(headers):
+            _json_response(handler, 403, {"error": "request origin is not allowed"})
+            return
+
+        if handler.headers.get("Transfer-Encoding"):
+            _json_response(handler, 400, {"error": "transfer encoding is not supported"})
+            return
+        try:
+            length = int(handler.headers.get("Content-Length", 0) or 0)
+            if length < 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            _json_response(handler, 400, {"error": "invalid content length"})
+            return
+        limit = request_body_limit(clean)
+        if length > limit:
+            _json_response(handler, 413, {"error": f"request exceeds {limit // (1024 * 1024)} MB limit"})
+            return
+        if length and clean.startswith("/api/"):
+            content_type = handler.headers.get_content_type()
+            if content_type != "application/json" and not content_type.endswith("+json"):
+                _json_response(handler, 415, {"error": "Content-Type must be application/json"})
+                return
+        try:
+            handler.connection.settimeout(30)
+            raw = handler.rfile.read(length) if length else b""
+        except (TimeoutError, OSError):
+            _json_response(handler, 408, {"error": "request body timed out"})
             return
 
         # Server-Sent Events: live progress for a background job. The client opens
@@ -246,53 +366,39 @@ def serve(api: Any, host: str = "127.0.0.1", port: int = 8770,
 
         if feishu_handler is not None and clean == feishu_path:
             try:
-                headers = {k: v for k, v in handler.headers.items()}
                 resp = asyncio.run(feishu_handler.handle_request(raw, headers=headers))
                 status, result = int(resp.get("status", 200)), resp.get("body", {})
             except Exception as exc:
                 status, result = 500, {"error": str(exc)}
-            payload = json.dumps(result, ensure_ascii=False).encode("utf-8")
-            handler.send_response(status)
-            handler.send_header("Content-Type", "application/json; charset=utf-8")
-            handler.send_header("Content-Length", str(len(payload)))
-            handler.end_headers()
-            _write_body(handler, payload)
+            _json_response(handler, status, result)
             return
 
         try:
             body = json.loads(raw.decode("utf-8")) if raw else {}
         except (json.JSONDecodeError, UnicodeDecodeError):
-            body = {}
+            _json_response(handler, 400, {"error": "invalid JSON body"})
+            return
+        if not isinstance(body, dict):
+            _json_response(handler, 400, {"error": "JSON body must be an object"})
+            return
         try:
             status, result = asyncio.run(api.handle(handler.command, handler.path, body))
-        except Exception as exc:
-            status, result = 500, {"error": str(exc)}
+        except Exception:
+            logger.exception("Unhandled API error for %s %s", handler.command, clean)
+            status, result = 500, {"error": "internal server error"}
 
         if isinstance(result, dict) and "_file" in result:
-            try:
-                data = Path(result["_file"]).read_bytes()
-                handler.send_response(200)
-                handler.send_header("Content-Type", result.get("_content_type", "application/octet-stream"))
-                handler.send_header("Content-Length", str(len(data)))
-                _send_cors_headers(handler)
-                if result.get("_no_cache"):
-                    handler.send_header("Cache-Control", "no-cache, must-revalidate")
-                handler.end_headers()
-                _write_body(handler, data)
+            if _serve_file(handler, result):
                 return
-            except OSError:
-                status, result = 404, {"error": "file not found"}
+            status, result = 404, {"error": "file not found"}
 
-        payload = json.dumps(result, ensure_ascii=False).encode("utf-8")
-        handler.send_response(status)
-        handler.send_header("Content-Type", "application/json; charset=utf-8")
-        handler.send_header("Content-Length", str(len(payload)))
-        _send_cors_headers(handler)
-        handler.end_headers()
-        _write_body(handler, payload)
+        _json_response(handler, status, result)
 
     class _Handler(BaseHTTPRequestHandler):
         def do_GET(self):
+            _respond(self)
+
+        def do_HEAD(self):
             _respond(self)
 
         def do_POST(self):
@@ -305,8 +411,12 @@ def serve(api: Any, host: str = "127.0.0.1", port: int = 8770,
             _respond(self)
 
         def do_OPTIONS(self):
+            if not request_origin_allowed({k: v for k, v in self.headers.items()}):
+                _json_response(self, 403, {"error": "request origin is not allowed"})
+                return
             self.send_response(204)
             _send_cors_headers(self)
+            _send_security_headers(self)
             self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
             self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Auth-Token")
             self.end_headers()

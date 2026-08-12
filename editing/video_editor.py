@@ -14,13 +14,14 @@ the audio track, not the mouth.
 
 from __future__ import annotations
 
-import base64
 import os
 import re
 import subprocess
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from utils.uploads import DEFAULT_VIDEO_UPLOAD_BYTES, decode_base64_upload, upload_limit
 
 _VIDEO_EXTS = {".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v"}
 _SAFE_RE = re.compile(r"[^0-9A-Za-z._\-一-鿿]+")
@@ -47,9 +48,10 @@ class VideoEditService:
                       if p.is_file() and p.suffix.lower() in _VIDEO_EXTS)
 
     def upload(self, filename: str, data_b64: str) -> dict:
-        raw = base64.b64decode(data_b64 or "", validate=False)
-        if not raw:
-            raise ValueError("empty upload")
+        raw = decode_base64_upload(
+            data_b64,
+            max_bytes=upload_limit("SCENEFORGE_MAX_VIDEO_BYTES", DEFAULT_VIDEO_UPLOAD_BYTES),
+        )
         self.imports_dir.mkdir(parents=True, exist_ok=True)
         name = _safe_name(filename)
         (self.imports_dir / name).write_bytes(raw)

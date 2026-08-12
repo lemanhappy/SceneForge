@@ -4,15 +4,9 @@ from .models import SubtitleLine, SubtitleTrack
 
 
 def probe_duration(video_path: str) -> float:
-    """Real shot duration via moviepy (imported lazily so timeline math is
-    testable without a video backend)."""
-    from moviepy import VideoFileClip
+    from utils.media import probe_media_duration
 
-    clip = VideoFileClip(video_path)
-    try:
-        return float(clip.duration)
-    finally:
-        clip.close()
+    return probe_media_duration(video_path)
 
 
 def build_timeline(

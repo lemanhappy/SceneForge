@@ -96,6 +96,12 @@ cd ..
 
 启动后访问 [http://127.0.0.1:8770/](http://127.0.0.1:8770/)。之后通常只需双击 `start.bat`。
 
+首次启动或排查环境问题可先执行：
+
+```powershell
+uv run sceneforge-doctor --workspace .
+```
+
 ### macOS / Linux
 
 ```bash
@@ -118,6 +124,8 @@ uv run python main_server.py
 | 用户 Skill | `skills_user/` |
 
 这些运行数据、密钥配置、用户素材和生成媒体默认不会进入源码仓库。Web 服务默认只监听 `127.0.0.1`；开放到局域网前必须配置 `SCENEFORGE_WEB_TOKEN`。安全说明见 [SECURITY.md](SECURITY.md)。
+
+SQLite 后端会在启动前检查数据库并将最近 7 份备份保存在 `.sceneforge/backups/`。手动检查、备份和恢复命令见 [运维与数据恢复](docs/运维与数据恢复.md)。质量基准的离线校验与真实模型结果格式见 [质量基准说明](sceneforge_benchmark/说明.md)。
 
 ## 开发与贡献
 

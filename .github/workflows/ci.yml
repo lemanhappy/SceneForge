@@ -13,7 +13,11 @@ concurrency:
 
 jobs:
   python:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
@@ -22,10 +26,14 @@ jobs:
           enable-cache: true
       - name: Repository hygiene
         run: python scripts/check_repo_hygiene.py
+      - name: Validate quality benchmark
+        run: python scripts/run_benchmark.py
       - name: Install Python dependencies
         run: uv sync --frozen --group dev
       - name: Run Python tests
         run: uv run --frozen pytest -q
+      - name: Startup diagnostics
+        run: uv run --frozen python scripts/doctor.py --workspace . --skip-web
 
   web:
     runs-on: ubuntu-latest
@@ -40,7 +48,9 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
+      - run: npm test
       - run: npm run build
+      - run: npm audit --omit=dev
 
   tui:
     runs-on: ubuntu-latest
@@ -56,3 +66,4 @@ jobs:
           cache-dependency-path: ui/package-lock.json
       - run: npm ci
       - run: npm test
+      - run: npm audit --omit=dev

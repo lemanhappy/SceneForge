@@ -13,23 +13,50 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3.12",
 ]
+
 dependencies = [
-    "aiohttp>=3.12.14",
+    "aiohttp>=3.14.3",
     "chardet>=5.2.0",
     "faiss-cpu>=1.12.0",
     "google-genai>=1.47.0",
-    "langchain>=0.3.26",
-    "langchain-community>=0.3.27",
-    "langchain-openai>=0.3.27",
-    "moviepy>=2.2.1",
+    "imageio-ffmpeg>=0.6.0",
+    "langchain>=1.3.9",
+    "langchain-classic>=1.0.8",
+    "langchain-community>=0.4.2",
+    "langchain-openai>=1.1.14",
+    "langchain-text-splitters>=1.1.2",
     "openai>=1.95.0",
-    "opencv-python",
-    "pillow>=11.3.0",
+    "opencv-python>=4.12.0.88,<5",
+    "pillow>=12.3.0",
     "pyyaml>=6.0.2",
-    "requests>=2.32.4",
-    "scenedetect[opencv]>=0.6.7.1",
+    "requests>=2.33.0",
+    "scenedetect>=0.7.1",
     "tenacity>=9.1.2",
 ]
+
+[project.scripts]
+sceneforge = "main_server:main"
+sceneforge-doctor = "scripts.doctor:main"
+sceneforge-db = "scripts.database_maintenance:main"
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["main_agent", "main_server", "project_identity"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = [
+    "agents*", "agent_runtime*", "artifacts*", "audio*", "channels*",
+    "characters*", "commands*", "domain*", "editing*", "infrastructure*",
+    "interfaces*", "pipelines*", "prompting*", "quality*", "repositories*",
+    "scripts*", "server*", "services*", "subtitles*", "tools*", "utils*", "video*",
+]
+
+[tool.setuptools.package-data]
+"infrastructure.sqlite" = ["migrations/*.sql"]
 
 [tool.uv.sources]
 torch = [

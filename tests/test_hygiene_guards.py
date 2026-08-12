@@ -4,11 +4,12 @@ packaging metadata, config templates, and test-suite isolation."""
 import asyncio
 import subprocess
 import sys
+import tempfile
 import tomllib
 import unittest
 from contextlib import suppress
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import yaml
 
@@ -45,28 +46,23 @@ class TestRateLimiterLocking(unittest.IsolatedAsyncioTestCase):
 
 
 class TestVideoConcatenationCleanup(unittest.TestCase):
-    def test_concatenate_closes_all_clips_even_on_failure(self):
-        clips = [MagicMock(), MagicMock()]
-        final = MagicMock()
-        with patch("utils.video.VideoFileClip", side_effect=clips), \
-             patch("utils.video.concatenate_videoclips", return_value=final):
-            concatenate_video_files(["a.mp4", "b.mp4"], "out.mp4")
-        final.write_videofile.assert_called_once()
-        final.close.assert_called_once()
-        for clip in clips:
-            clip.close.assert_called_once()
+    def test_concatenate_removes_manifest_when_ffmpeg_fails(self):
+        manifest = None
 
-        # And when writing fails, the ffmpeg readers must still be released.
-        clips = [MagicMock(), MagicMock()]
-        final = MagicMock()
-        final.write_videofile.side_effect = OSError("disk full")
-        with patch("utils.video.VideoFileClip", side_effect=clips), \
-             patch("utils.video.concatenate_videoclips", return_value=final):
+        def fail(command):
+            nonlocal manifest
+            manifest = Path(command[command.index("-i") + 1])
+            self.assertTrue(manifest.exists())
+            raise OSError("disk full")
+
+        with tempfile.TemporaryDirectory() as directory, \
+             patch("utils.video._ffmpeg_or_raise", return_value="ffmpeg"), \
+             patch("utils.video._run_ffmpeg", side_effect=fail):
+            output = str(Path(directory) / "out.mp4")
             with self.assertRaises(OSError):
-                concatenate_video_files(["a.mp4", "b.mp4"], "out.mp4")
-        final.close.assert_called_once()
-        for clip in clips:
-            clip.close.assert_called_once()
+                concatenate_video_files(["a.mp4", "b.mp4"], output)
+            self.assertIsNotNone(manifest)
+            self.assertFalse(manifest.exists())
 
 
 class TestPackagingMetadata(unittest.TestCase):

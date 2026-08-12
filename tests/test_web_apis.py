@@ -406,6 +406,22 @@ class TestAuthorized(unittest.TestCase):
 
 
 class TestAppRouting(unittest.TestCase):
+    def test_health_route_is_minimal_and_reports_readiness(self):
+        app = AppAPI(health_check=lambda: {
+            "status": "ok",
+            "components": {"database": "ok", "ffmpeg": "ok"},
+        })
+
+        status, result = run(app.handle("GET", "/api/health"))
+
+        self.assertEqual(status, 200)
+        self.assertEqual(result["status"], "ok")
+        self.assertNotIn("path", result)
+
+    def test_unhealthy_route_returns_service_unavailable(self):
+        app = AppAPI(health_check=lambda: {"status": "error", "components": {"database": "error"}})
+        self.assertEqual(run(app.handle("GET", "/api/health"))[0], 503)
+
     def test_dispatch_and_static(self):
         with tempfile.TemporaryDirectory() as root:
             with open(os.path.join(root, "index.html"), "w", encoding="utf-8") as f:

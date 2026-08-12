@@ -12,7 +12,6 @@ from scenedetect.detectors import ContentDetector
 from interfaces import ShotDescription, ShotBriefDescription, Camera, ImageOutput, VideoOutput
 
 
-from moviepy import VideoFileClip
 from PIL import Image
 
 
@@ -196,16 +195,12 @@ class CameraImageGenerator:
         second_video_path = os.path.join(output_dir, f"{video_name}-Scene-002.mp4")
         if os.path.exists(second_video_path):
             # use first frame of second shot as new camera image
-            with VideoFileClip(second_video_path) as clip:
-                ff = clip.get_frame(0)
+            ff = _read_video_frame(second_video_path, at_seconds=0)
             ff = Image.fromarray(ff.astype('uint8'), 'RGB')
             return ImageOutput(fmt="pil", ext="png", data=ff)
         else:
             # use last frame of transition video to instead
-            with VideoFileClip(transition_video_path) as clip:
-                lf_time = clip.duration - (1 / clip.fps)
-                lf_time = max(0, lf_time)
-                lf = clip.get_frame(lf_time)
+            lf = _read_video_frame(transition_video_path, from_end=True)
             lf = Image.fromarray(lf.astype('uint8'), 'RGB')
             return ImageOutput(fmt="pil", ext="png", data=lf)
 
@@ -252,3 +247,21 @@ def _validate_camera_tree(cameras: List[Camera]) -> None:
                 raise ValueError(f"Cycle detected in camera parent graph involving camera {current.idx}.")
             seen.add(current.idx)
             current = by_idx[current.parent_cam_idx]
+
+
+def _read_video_frame(path: str, *, at_seconds: float = 0, from_end: bool = False):
+    capture = cv2.VideoCapture(path)
+    try:
+        if not capture.isOpened():
+            raise ValueError(f"Could not open video: {path}")
+        if from_end:
+            frame_count = max(1, int(capture.get(cv2.CAP_PROP_FRAME_COUNT)))
+            capture.set(cv2.CAP_PROP_POS_FRAMES, frame_count - 1)
+        else:
+            capture.set(cv2.CAP_PROP_POS_MSEC, max(0.0, at_seconds) * 1000)
+        ok, frame = capture.read()
+        if not ok or frame is None:
+            raise ValueError(f"Could not read video frame: {path}")
+        return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    finally:
+        capture.release()

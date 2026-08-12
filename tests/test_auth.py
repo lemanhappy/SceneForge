@@ -3,6 +3,7 @@
 import unittest
 
 from server.app import allowed_cors_origin, authorized
+from server.http_security import query_token_allowed, request_body_limit, request_origin_allowed
 from main_server import _is_loopback_host
 
 
@@ -50,6 +51,35 @@ class TestCorsPolicy(unittest.TestCase):
 
     def test_request_without_origin_does_not_emit_cors(self):
         self.assertEqual(allowed_cors_origin({}), "")
+
+    def test_mutations_allow_cli_loopback_and_same_origin(self):
+        self.assertTrue(request_origin_allowed({}))
+        self.assertTrue(request_origin_allowed({"Origin": "http://127.0.0.1:5173"}))
+        self.assertTrue(request_origin_allowed({
+            "Origin": "https://studio.example.com",
+            "Host": "studio.example.com",
+        }))
+
+    def test_mutations_reject_cross_site_origin(self):
+        self.assertFalse(request_origin_allowed({
+            "Origin": "https://evil.example",
+            "Host": "127.0.0.1:8770",
+        }))
+        self.assertFalse(request_origin_allowed({"Origin": "null"}))
+
+    def test_query_tokens_are_get_only(self):
+        self.assertTrue(query_token_allowed("GET", "/api/production/job-1/video"))
+        self.assertTrue(query_token_allowed("GET", "/api/production/jobs/1/stream"))
+        self.assertFalse(query_token_allowed("GET", "/api/config"))
+        self.assertFalse(query_token_allowed("POST", "/api/production/job-1/video"))
+        self.assertFalse(query_token_allowed("DELETE", "/api/edit/video"))
+
+    def test_upload_routes_have_bounded_larger_limits(self):
+        ordinary = request_body_limit("/api/config")
+        audio = request_body_limit("/api/bgm/upload")
+        video = request_body_limit("/api/edit/upload")
+        self.assertGreater(audio, ordinary)
+        self.assertGreater(video, audio)
 
 
 class TestServerBindingPolicy(unittest.TestCase):

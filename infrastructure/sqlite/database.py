@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import sqlite3
 import threading
-from contextlib import contextmanager
+import os
+import tempfile
+from contextlib import closing, contextmanager
 from pathlib import Path
 from typing import Iterator
 
@@ -70,3 +72,34 @@ class SQLiteDatabase:
         from .migrator import SQLiteMigrator
 
         return SQLiteMigrator(self).migrate()
+
+    def integrity_check(self, *, quick: bool = True) -> tuple[bool, list[str]]:
+        pragma = "quick_check" if quick else "integrity_check"
+        with self.connection() as connection:
+            messages = [str(row[0]) for row in connection.execute(f"PRAGMA {pragma}").fetchall()]
+        return messages == ["ok"], messages
+
+    def backup_to(self, destination: str | Path) -> Path:
+        """Create and verify an atomic SQLite backup, including WAL content."""
+        target = Path(destination).resolve()
+        if target == self.path:
+            raise ValueError("backup destination must differ from database path")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        handle, temp_name = tempfile.mkstemp(
+            prefix=f".{target.stem}-",
+            suffix=".tmp",
+            dir=target.parent,
+        )
+        os.close(handle)
+        temp_path = Path(temp_name)
+        try:
+            with self.connection() as source:
+                with closing(sqlite3.connect(temp_path)) as backup:
+                    source.backup(backup)
+                    messages = [str(row[0]) for row in backup.execute("PRAGMA integrity_check").fetchall()]
+                    if messages != ["ok"]:
+                        raise sqlite3.DatabaseError("backup integrity check failed: " + "; ".join(messages))
+            os.replace(temp_path, target)
+            return target
+        finally:
+            temp_path.unlink(missing_ok=True)

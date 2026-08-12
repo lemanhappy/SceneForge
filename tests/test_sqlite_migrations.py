@@ -1,9 +1,16 @@
 import sqlite3
 import tempfile
+import time
 import unittest
+from contextlib import closing
 from pathlib import Path
 
 from infrastructure.sqlite import MigrationError, SQLiteDatabase, SQLiteMigrator
+from services.database_maintenance import (
+    create_database_backup,
+    prepare_database_startup,
+    prune_database_backups,
+)
 
 
 class SQLiteMigrationTests(unittest.TestCase):
@@ -85,3 +92,40 @@ class SQLiteMigrationTests(unittest.TestCase):
             self.assertIn("stable", names)
             self.assertNotIn("partial", names)
             self.assertEqual(version, 1)
+
+    def test_verified_backup_contains_committed_wal_data(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            database = SQLiteDatabase(root / "sceneforge.db")
+            with database.transaction() as connection:
+                connection.execute("CREATE TABLE sample(value TEXT)")
+                connection.execute("INSERT INTO sample VALUES ('saved')")
+
+            backup = create_database_backup(database.path, root / "backups")
+
+            self.assertTrue(backup.is_file())
+            ok, messages = SQLiteDatabase(backup).integrity_check(quick=False)
+            self.assertTrue(ok, messages)
+            with closing(sqlite3.connect(backup)) as connection:
+                self.assertEqual(connection.execute("SELECT value FROM sample").fetchone()[0], "saved")
+
+    def test_startup_backup_skips_new_database_and_prunes_oldest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / "sceneforge.db"
+            backups = root / "backups"
+            self.assertIsNone(prepare_database_startup(path, backups))
+            database = SQLiteDatabase(path)
+            with database.transaction() as connection:
+                connection.execute("CREATE TABLE sample(value TEXT)")
+            first = create_database_backup(path, backups)
+            time.sleep(0.01)
+            second = create_database_backup(path, backups)
+            time.sleep(0.01)
+            third = create_database_backup(path, backups)
+
+            removed = prune_database_backups(backups, keep=2)
+
+            self.assertEqual(removed, [first])
+            self.assertTrue(second.exists())
+            self.assertTrue(third.exists())

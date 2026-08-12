@@ -71,8 +71,11 @@ class SfxService:
         return self.get()
 
     def upload(self, filename: str, data_b64: str) -> dict:
-        raw = base64.b64decode(data_b64 or "", validate=False)
-        if not raw:
-            raise ValueError("empty upload")
+        from utils.uploads import DEFAULT_AUDIO_UPLOAD_BYTES, decode_base64_upload, upload_limit
+
+        raw = decode_base64_upload(
+            data_b64,
+            max_bytes=upload_limit("SCENEFORGE_MAX_AUDIO_BYTES", DEFAULT_AUDIO_UPLOAD_BYTES),
+        )
         self.library.add_track(filename, raw)
         return self.get()
