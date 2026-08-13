@@ -186,8 +186,11 @@ async function doReopen(gate) {
 }
 
 async function publish() {
-  msg.value = '生成链接中…'
-  try { const r = await api('POST', '/api/production/' + props.sid + '/publish'); msg.value = '分享链接：' + (r.url || r.final_video_path || '（已托管，未配置公开 URL）') }
+  msg.value = '生成分享链接中…'
+  try {
+    const r = await api('POST', '/api/production/' + props.sid + '/publish')
+    msg.value = r.url ? ('分享链接：' + r.url) : '未配置公开托管，请直接下载成片'
+  }
   catch (e) { msg.value = '失败：' + e.message }
 }
 async function cost() {

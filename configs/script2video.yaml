@@ -122,8 +122,9 @@ audio:
     tp: -1.5
     lra: 11.0
 hosting:
+  enabled: false
   type: local_static
-  public_base_url: https://example.com/sceneforge
+  public_base_url: ''
   local_root: .public_artifacts
 messaging:
   inbound_enabled: false

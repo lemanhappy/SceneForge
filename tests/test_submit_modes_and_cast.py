@@ -158,6 +158,17 @@ class TestTopicApi(unittest.TestCase):
         self.assertEqual(svc.kwargs["overrides"]["subtitle_enabled"], True)
         self.assertEqual(svc.kwargs["overrides"]["subtitle_burn_in"], True)
 
+    def test_packaging_controls_are_forwarded_as_project_overrides(self):
+        api, svc = self._api()
+        status, _ = asyncio.run(api.handle("POST", "/api/production/topic", {
+            "idea": "一个程序员的逆袭",
+            "hook_enabled": True,
+            "cover_enabled": True,
+        }))
+        self.assertEqual(status, 200)
+        self.assertEqual(svc.kwargs["overrides"]["hook_enabled"], True)
+        self.assertEqual(svc.kwargs["overrides"]["cover_enabled"], True)
+
     def test_reusable_asset_selections_are_forwarded(self):
         api, svc = self._api()
         status, _ = asyncio.run(api.handle("POST", "/api/production/topic", {

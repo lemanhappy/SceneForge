@@ -1,6 +1,6 @@
 <script setup>
 import { onMounted, ref } from 'vue'
-import { Check, FolderOpen, Moon, RotateCcw, Save, Sun } from '@lucide/vue'
+import { Check, CheckCircle2, FolderOpen, Moon, RefreshCw, RotateCcw, Save, Sun, TriangleAlert } from '@lucide/vue'
 import { api } from '../lib/api.js'
 import { applyTheme } from '../lib/theme.js'
 
@@ -11,6 +11,15 @@ const loading = ref(true)
 const saving = ref(false)
 const pickingFolder = ref(false)
 const msg = ref('')
+const readiness = ref(null)
+const checkingReadiness = ref(false)
+
+async function checkReadiness() {
+  checkingReadiness.value = true
+  try { readiness.value = await api('GET', '/api/app-settings/readiness') }
+  catch (e) { readiness.value = { ready: false, summary: '自检失败：' + e.message, checks: [] } }
+  checkingReadiness.value = false
+}
 
 async function load() {
   loading.value = true
@@ -72,12 +81,29 @@ async function save() {
   saving.value = false
 }
 
-onMounted(load)
+onMounted(() => { load(); checkReadiness() })
 </script>
 
 <template>
   <div v-if="loading" class="panel muted">加载中…</div>
   <template v-else>
+    <section class="panel general-settings-panel readiness-panel">
+      <div class="setting-section-head">
+        <div><h2>创作自检</h2><span>开始生成前检查本地环境和核心模型配置，不会显示或发送密钥。</span></div>
+        <button class="ghost" type="button" :disabled="checkingReadiness" @click="checkReadiness"><RefreshCw :size="15" />{{ checkingReadiness ? '检查中…' : '重新检查' }}</button>
+      </div>
+      <div v-if="readiness" class="readiness-summary" :class="{ ready: readiness.ready }">
+        <CheckCircle2 v-if="readiness.ready" :size="18" /><TriangleAlert v-else :size="18" />
+        <strong>{{ readiness.summary }}</strong>
+      </div>
+      <div v-if="readiness" class="readiness-grid">
+        <div v-for="item in readiness.checks" :key="item.key" class="readiness-check" :class="item.status">
+          <CheckCircle2 v-if="item.status === 'ok'" :size="15" /><TriangleAlert v-else :size="15" />
+          <div><strong>{{ item.label }}</strong><span>{{ item.detail }}</span></div>
+        </div>
+      </div>
+    </section>
+
     <section class="panel general-settings-panel">
       <div class="setting-section-head"><div><h2>界面主题</h2><span>选择后立即预览，保存后在下次启动时保留。</span></div></div>
       <div class="theme-picker" role="group" aria-label="界面主题">

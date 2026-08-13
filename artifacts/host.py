@@ -24,12 +24,15 @@ class ArtifactHost:
     def from_config(cls, config: dict) -> Optional["ArtifactHost"]:
         section = (config or {}).get("hosting") or {}
         host_type = section.get("type")
-        if not host_type:
+        if not host_type or not bool(section.get("enabled", False)):
             return None
         if host_type != "local_static":
             raise ValueError(f"Unsupported hosting.type: {host_type} (only 'local_static' is implemented)")
+        public_base_url = str(section.get("public_base_url", "")).strip()
+        if not public_base_url or "example.com" in public_base_url.lower():
+            return None
         return cls(
-            public_base_url=str(section.get("public_base_url", "")),
+            public_base_url=public_base_url,
             local_root=str(section.get("local_root", ".public_artifacts")),
         )
 

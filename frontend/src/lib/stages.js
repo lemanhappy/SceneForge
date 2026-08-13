@@ -12,7 +12,7 @@ export const STEPS = [
 export const PHASE_CN = { generating: '生成中', review: '待审核', revising: '重做中', done: '已完成', error: '出错', pending: '待开始', interrupted: '已中断' }
 
 export const STATE_HINT = {
-  busy: '生成中…（完成后自动刷新）', done: '已完成并发布', error: '出错，可重试或提出修改', idle: '准备中',
+  busy: '生成中…（完成后自动刷新）', done: '制作已完成', error: '出错，可重试或提出修改', idle: '准备中',
   interrupted: '⚠ 生成被中断（服务重启或异常）。点「继续生成」从断点续跑——已完成的镜头不会重做。',
 }
 
@@ -67,7 +67,7 @@ export function detailButtons(state, s) {
     }[gate] || '进入下一阶段'
     return { ...B, ok: nextAction, rev: true, view: hasFinal }
   }
-  if (state === 'final_review') return { ...B, ok: '完成并发布', rev: true, view: true }
+  if (state === 'final_review') return { ...B, ok: '完成制作', rev: true, view: true }
   if (state === 'done') return { ...B, ok: null, rev: false, view: true, pub: true, clean: true, reopen: true }
   if (state === 'error') return { ...B, ok: '重试', rev: true, view: hasFinal }
   return { ...B, ok: null, rev: false }

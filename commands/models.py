@@ -12,6 +12,7 @@ class UserCommand(BaseModel):
     command_type: Literal[
         "new_topic",
         "approve",
+        "publish",
         "revise",
         "regenerate",
         "status",

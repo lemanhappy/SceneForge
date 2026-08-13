@@ -22,10 +22,11 @@ def run(coro):
 class TestArtifactHost(unittest.TestCase):
     def test_from_config(self):
         self.assertIsNone(ArtifactHost.from_config({}))
-        host = ArtifactHost.from_config({"hosting": {"type": "local_static", "public_base_url": "https://x/v", "local_root": "r"}})
+        self.assertIsNone(ArtifactHost.from_config({"hosting": {"type": "local_static", "public_base_url": "https://x/v", "local_root": "r"}}))
+        host = ArtifactHost.from_config({"hosting": {"enabled": True, "type": "local_static", "public_base_url": "https://x/v", "local_root": "r"}})
         self.assertIsNotNone(host)
         with self.assertRaises(ValueError):
-            ArtifactHost.from_config({"hosting": {"type": "s3"}})
+            ArtifactHost.from_config({"hosting": {"enabled": True, "type": "s3", "public_base_url": "https://x/v"}})
 
     def test_upload_copies_and_builds_url(self):
         with tempfile.TemporaryDirectory() as root:

@@ -1513,7 +1513,7 @@ class ProductionService:
         stage = result.get("stage", "")
         summary = result.get("summary", "")
         if stage == "completed":
-            return f"🎬 已发布完成。{summary}".strip()
+            return f"🎬 制作已完成。{summary}".strip()
         if stage:
             return f"【{stage} 已就绪】\n{summary}\n请回复：通过 / 修改：<意见>".strip()
         return summary or "✅ 处理完成"

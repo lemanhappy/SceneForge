@@ -13,7 +13,7 @@ const props = defineProps({
   selectedSid: { type: String, default: null },
   resetKey: { type: Number, default: 0 },
 })
-const emit = defineEmits(['sessions-changed', 'history-selection'])
+const emit = defineEmits(['sessions-changed', 'history-selection', 'open-settings'])
 
 const sessions = ref([])
 const activeSid = ref(null)
@@ -188,7 +188,7 @@ async function cleanupAll() {
         </div>
       </section>
 
-      <CreateForm v-else-if="!activeSid" @created="onCreated" @sessions-changed="onSessionChanged" />
+      <CreateForm v-else-if="!activeSid" :reset-key="resetKey" @created="onCreated" @sessions-changed="onSessionChanged" @open-settings="emit('open-settings')" />
       <SessionDetail v-else :key="activeSid" :sid="activeSid" @sessions-changed="onSessionChanged" />
     </div>
     <TaskCenter :open="taskCenterOpen" @close="taskCenterOpen = false" @open-project="openTaskProject" />

@@ -73,6 +73,14 @@ class TriggerService:
             return self._wrap(ct, await self.adapters.sceneforge_regenerate_shot(args))
         if ct == "status":
             return {"ok": True, "command_type": ct, "snapshot": self.session_index.snapshot()}
+        if ct == "publish":
+            session_id = self._active_session_id(command)
+            if session_id is None:
+                return {"ok": False, "reason": "no_session", "command_type": ct}
+            args = {"session_id": session_id}
+            if sender_id:
+                args["target"] = sender_id
+            return self._wrap(ct, await self.adapters.sceneforge_publish(args))
         if ct == "approve":
             return await self._approve(command)
         if ct == "revise":
@@ -120,9 +128,9 @@ class TriggerService:
         self.session_index.resolve_review_task(session_id, task["review_id"], "approved")
         result = {"ok": True, "command_type": "approve", "resolved": task["review_id"], "stage": task["stage"]}
         if task["stage"] == "final":
-            pub = await self.adapters.sceneforge_publish({"session_id": session_id})
-            result["published"] = getattr(pub, "ok", False)
-            result["publish_payload"] = getattr(pub, "metadata", None)
+            self.session_index.update_stage(session_id, "completed", "Production completed")
+            result["stage"] = "completed"
+            result["local_completed"] = True
         return result
 
     async def _revise(self, command: UserCommand) -> dict:

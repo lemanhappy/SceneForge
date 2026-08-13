@@ -1,14 +1,15 @@
 <script setup>
-import { computed, ref, reactive, onMounted, onActivated } from 'vue'
-import { CircleHelp, Square } from '@lucide/vue'
+import { computed, ref, reactive, onMounted, onActivated, watch } from 'vue'
+import { AlertTriangle, CheckCircle2, ChevronDown, CircleHelp, Clapperboard, GraduationCap, Mic2, RefreshCw, Settings2, ShoppingBag, SlidersHorizontal, Square } from '@lucide/vue'
 import { api, watchJob } from '../lib/api.js'
 import { confirmModal } from '../lib/confirm.js'
 import JobProgress from './JobProgress.vue'
 
 const props = defineProps({
   seriesContext: { type: Object, default: null },
+  resetKey: { type: Number, default: 0 },
 })
-const emit = defineEmits(['created', 'sessions-changed', 'cancel'])
+const emit = defineEmits(['created', 'sessions-changed', 'cancel', 'open-settings'])
 const isSeriesEpisode = computed(() => !!(props.seriesContext && props.seriesContext.series_id))
 
 function isSeriesAssetLocked(kind, assetId) {
@@ -23,16 +24,73 @@ function isSeriesAssetLocked(kind, assetId) {
 }
 
 const mode = ref('idea')
+const contentType = ref('short_drama')
+const targetPlatform = ref('douyin')
+const targetDuration = ref(30)
 const idea = ref('')
 const title = ref('')
 const scriptText = ref('')
 const style = ref('')
 const req = ref('')
 const activeHelp = ref('')
+const advancedOpen = ref(false)
+const lastUsed = ref({ style: '', user_requirement: '' })
+const readiness = ref(null)
+const checkingReadiness = ref(false)
+
+const CONTENT_TYPES = [
+  {
+    key: 'short_drama', label: '剧情短片', short: '冲突反转', icon: Clapperboard, domain: 'short_drama', duration: 30,
+    summary: '用人物冲突和反转留住观众', flow: '冲突钩子 → 情绪升级 → 反转或结果', voice: '角色对白为主，少用解释性旁白', visual: '表情特写、反应镜头和快速切换',
+    ideaLabel: '剧情梗概', placeholder: '写清主角、核心冲突和反转方向',
+    help: '写清主角、发生了什么、主要冲突和结局方向；一到三句话即可，不必写成完整剧本。',
+    example: '雨夜，一名连续值班的急救员在空荡车站发现母亲留下的饭盒。他原本不愿回家，听见母亲的语音后终于改变决定。',
+    style: '电影感现实主义，人物表演自然克制，镜头叙事清晰，光线与色彩统一',
+  },
+  {
+    key: 'explainer', label: '影视解说', short: '旁白推进', icon: Mic2, domain: 'explainer', duration: 60,
+    summary: '用高密度旁白串联关键看点', flow: '悬念钩子 → 事件展开 → 结局揭晓', voice: '第三人称旁白主导，每段留过渡钩子', visual: '每个信息点匹配一个证据或情节画面',
+    ideaLabel: '解说对象与看点', placeholder: '填写要解说的作品或事件，以及最值得讲的看点',
+    help: '说明要解说的作品、事件或人物，并写出核心看点和结局方向；系统会将其组织成第三人称旁白。',
+    example: '解说电影《示例片名》中主角从失踪案嫌疑人到揭开真相的过程，重点讲三次证词反转和最后的身份揭晓。',
+    style: '高信息密度纪实解说，画面紧跟旁白信息点，构图清晰，节奏利落',
+  },
+  {
+    key: 'knowledge', label: '知识科普', short: '问题讲解', icon: GraduationCap, domain: 'knowledge', duration: 60,
+    summary: '把知识点讲清楚，并给出生活化例子', flow: '好奇问题 → 原理解释 → 生活例子 → 结论', voice: '通俗讲解，多用类比，避免术语堆砌', visual: '图示、对比画面和关键细节特写',
+    ideaLabel: '知识主题', placeholder: '填写要解释的问题、原理或常见误区',
+    help: '提出一个明确问题或常见误区，并补充希望观众理解的核心结论；系统会按问题、原理、例子、结论组织内容。',
+    example: '为什么冬天金属摸起来比木头更冷？解释导热速度的差异，并用锅柄和保温杯做生活化类比。',
+    style: '现代知识可视化，画面简洁准确，重点突出，信息层级清晰',
+  },
+  {
+    key: 'product', label: '商品展示', short: '卖点证明', icon: ShoppingBag, domain: 'product', duration: 20,
+    summary: '围绕使用场景证明核心卖点', flow: '痛点或效果 → 卖点证明 → 使用场景 → 收束', voice: '利益点前置，只描述已提供的真实能力', visual: '产品全貌、材质细节和真实使用情境',
+    ideaLabel: '商品与核心卖点', placeholder: '填写商品、目标人群、使用场景和 1-3 个真实卖点',
+    help: '写清商品是什么、给谁用、解决什么问题，并列出能够被画面证明的真实卖点；不要填写无法验证的功效。',
+    example: '一款适合通勤族的轻量保温杯，重点展示单手开盖、防漏和放入车载杯架，场景为早高峰出门与办公室使用。',
+    style: '干净商业摄影，产品主体清晰，材质和细节真实，光线精致，镜头节奏紧凑',
+  },
+]
+const PLATFORMS = [
+  { key: 'douyin', label: '抖音 / 快手', aspect: 'portrait' },
+  { key: 'xiaohongshu', label: '小红书', aspect: 'portrait' },
+  { key: 'video_account', label: '视频号', aspect: 'portrait' },
+  { key: 'bilibili', label: 'B站', aspect: 'landscape' },
+]
+const selectedContentType = computed(() => CONTENT_TYPES.find((item) => item.key === contentType.value) || CONTENT_TYPES[0])
+const selectedPlatform = computed(() => PLATFORMS.find((item) => item.key === targetPlatform.value) || PLATFORMS[0])
+const presetFeatureSummary = computed(() => [
+  aspect.value === 'portrait' ? '竖屏 9:16' : (aspect.value === 'square' ? '方形 1:1' : '横屏 16:9'),
+  sub.value ? '字幕开启' : '字幕关闭',
+  tts.value ? '配音开启' : '配音关闭',
+  hookEnabled.value ? '钩子开启' : '钩子关闭',
+  coverEnabled.value ? '导出封面' : '不导出封面',
+].join(' · '))
 
 // 本片设置
 const lang = ref('zh-CN')
-const aspect = ref('landscape')
+const aspect = ref('portrait')
 const qualityTier = ref('balanced')
 const continuitySourceId = ref('')
 const continuitySources = ref([])
@@ -42,11 +100,17 @@ const qualityProfiles = ref([
   { tier: 'quality', label: '高质量', description: '每帧生成 3 张选优，每镜生成 2 个视频候选', speed_label: '较慢', image_candidates: 3, video_candidates: 2 },
 ])
 const activeQualityProfile = computed(() => qualityProfiles.value.find((item) => item.tier === qualityTier.value) || qualityProfiles.value[1])
+const advancedSummary = computed(() => {
+  const aspectLabel = aspect.value === 'portrait' ? '竖屏 9:16' : (aspect.value === 'square' ? '方形 1:1' : '横屏 16:9')
+  return `${activeQualityProfile.value.label}质量 · ${aspectLabel} · ${sub.value ? '字幕' : '无字幕'} · ${tts.value ? '配音' : '无配音'}`
+})
 const domain = ref('')
 const domains = ref([])      // builtin [{key,label}]
 const skills = ref([])       // user skills [{key,label}]
 const sub = ref(true)
-const tts = ref(false)
+const tts = ref(true)
+const hookEnabled = ref(true)
+const coverEnabled = ref(true)
 const voice = ref('')
 const bgm = ref('')
 const voiceMeta = reactive({ voices: [], provider: '', model: '', voice: '' })
@@ -73,6 +137,74 @@ const stopping = ref(false)
 const seriesContextApplied = ref(false)
 const audioSrc = ref('')
 const audio = ref(null)
+
+function applyContentPreset(replaceStyle = true) {
+  const preset = selectedContentType.value
+  domain.value = preset.domain
+  targetDuration.value = preset.duration
+  if (replaceStyle || !style.value.trim()) style.value = preset.style
+  sub.value = true
+  const ttsCheck = readiness.value && readiness.value.checks && readiness.value.checks.find((item) => item.key === 'tts')
+  tts.value = !ttsCheck || ttsCheck.status === 'ok'
+  hookEnabled.value = true
+  coverEnabled.value = true
+}
+
+function applyPlatformPreset() {
+  aspect.value = selectedPlatform.value.aspect
+}
+
+function resetForm() {
+  if (isSeriesEpisode.value) return
+  mode.value = 'idea'
+  contentType.value = 'short_drama'
+  targetPlatform.value = 'douyin'
+  targetDuration.value = 30
+  idea.value = ''
+  title.value = ''
+  scriptText.value = ''
+  style.value = ''
+  req.value = ''
+  continuitySourceId.value = ''
+  qualityTier.value = 'balanced'
+  lang.value = 'zh-CN'
+  bgm.value = ''
+  tmplIdx.value = ''
+  advancedOpen.value = false
+  castSel.value = {}
+  propSel.value = {}
+  sceneSel.value = {}
+  loraSel.value = {}
+  msg.value = ''
+  applyContentPreset(true)
+  applyPlatformPreset()
+}
+
+function applyLastUsed() {
+  style.value = lastUsed.value.style || style.value
+  req.value = lastUsed.value.user_requirement || ''
+  advancedOpen.value = true
+  msg.value = '已沿用上次的风格和额外要求'
+}
+
+function composedRequirement() {
+  const platform = selectedPlatform.value.label
+  const preset = selectedContentType.value
+  const kind = preset.label
+  const spec = `内容类型：${kind}；发布平台：${platform}；目标时长约 ${targetDuration.value} 秒；画面比例：${aspect.value === 'portrait' ? '9:16' : (aspect.value === 'square' ? '1:1' : '16:9')}。`
+  const strategy = `内容策略：${preset.flow}；${preset.voice}；${preset.visual}。`
+  return [spec, strategy, req.value.trim()].filter(Boolean).join('\n')
+}
+
+async function checkReadiness() {
+  checkingReadiness.value = true
+  try {
+    readiness.value = await api('GET', '/api/app-settings/readiness')
+  } catch (e) {
+    readiness.value = { ready: false, checks: [], summary: '无法完成创作自检：' + e.message }
+  }
+  checkingReadiness.value = false
+}
 
 function reconcileSelection(selection, models) {
   const valid = new Set(models.map((item) => item.asset_id))
@@ -146,6 +278,8 @@ function applySeriesContext() {
   aspect.value = context.aspect_ratio || aspect.value
   qualityTier.value = context.quality_tier || qualityTier.value
   domain.value = context.domain || domain.value
+  targetDuration.value = Number(context.episode_duration_sec || targetDuration.value)
+  if (context.aspect_ratio === 'landscape') targetPlatform.value = 'bilibili'
   const durationHint = context.episode_duration_sec ? `本集目标时长约 ${context.episode_duration_sec} 秒。` : ''
   if (durationHint && !req.value.includes(durationHint)) req.value = [durationHint, req.value].filter(Boolean).join('\n')
   applySeriesAssetSelections()
@@ -178,11 +312,7 @@ function applyContinuitySource() {
 async function loadTemplates() {
   try {
     const t = await api('GET', '/api/templates')
-    const lu = t.last_used || {}
-    if (!isSeriesEpisode.value) {
-      if (lu.style && !style.value) style.value = lu.style
-      if (lu.user_requirement && !req.value) req.value = lu.user_requirement
-    }
+    lastUsed.value = t.last_used || { style: '', user_requirement: '' }
     templates.value = t.templates || []
   } catch (e) { /* ignore */ }
 }
@@ -209,10 +339,14 @@ async function loadDefaults() {
   try { const b = await api('GET', '/api/bgm'); bgmTracks.value = b.tracks || [] } catch (e) {}
 }
 onMounted(async () => {
-  await Promise.all([loadDomains(), loadTemplates(), loadDefaults(), loadContinuitySources(), loadQualityProfiles(), loadAssetModels()])
+  await Promise.all([loadDomains(), loadTemplates(), loadDefaults(), loadContinuitySources(), loadQualityProfiles(), loadAssetModels(), checkReadiness()])
+  if (!isSeriesEpisode.value) resetForm()
   applySeriesContext()
 })
 onActivated(async () => { await loadAssetModels(); loadContinuitySources() })
+watch(() => props.resetKey, () => resetForm())
+watch(contentType, () => applyContentPreset(true))
+watch(targetPlatform, applyPlatformPreset)
 
 function applyTemplate() {
   if (tmplIdx.value === '') return
@@ -236,6 +370,10 @@ async function preview() {
 
 async function submit() {
   if (progress.value) return
+  if (!readiness.value || !readiness.value.ready) {
+    msg.value = '创作环境尚未就绪，请先完成自检中的必需配置'
+    return
+  }
   let ideaVal = '', script = ''
   if (mode.value === 'script') { script = scriptText.value.trim(); if (!script) { msg.value = '请粘贴剧本全文'; return } ideaVal = title.value.trim() }
   else { ideaVal = idea.value.trim(); if (!ideaVal) return }
@@ -246,14 +384,16 @@ async function submit() {
   msg.value = mode.value === 'script' ? '已提交，导入剧本中…' : '已提交，生成剧本中…'
   progress.value = []
   try {
+    const finalRequirement = composedRequirement()
     api('POST', '/api/templates/remember', { style: style.value, user_requirement: req.value }).catch(() => {})
     const rec = await api('POST', '/api/production/topic', {
-      idea: ideaVal, script, mode: mode.value, style: style.value, user_requirement: req.value, domain: domain.value,
+      idea: ideaVal, script, mode: mode.value, style: style.value, user_requirement: finalRequirement, domain: domain.value,
       character_asset_ids, prop_asset_ids, scene_asset_ids, lora_ids,
       target_language: lang.value, aspect_ratio: aspect.value,
       quality_tier: qualityTier.value,
       continuity_source_session_id: continuitySourceId.value || undefined,
       tts_enabled: tts.value, subtitle_enabled: sub.value, subtitle_burn_in: sub.value,
+      hook_enabled: hookEnabled.value, cover_enabled: coverEnabled.value,
       voice: tts.value ? voice.value : '', bgm_track: bgm.value,
       series_id: props.seriesContext && props.seriesContext.series_id,
       episode_number: props.seriesContext && props.seriesContext.episode_number,
@@ -305,6 +445,47 @@ async function stopCreation() {
     </div>
     <div class="cre-scroll">
     <div class="panel">
+    <div v-if="readiness && !readiness.ready" class="creation-readiness" role="status">
+      <AlertTriangle :size="18" />
+      <div><strong>创作环境尚未就绪</strong><span>{{ readiness.summary }}</span></div>
+      <button class="ghost" type="button" :disabled="checkingReadiness" @click="checkReadiness"><RefreshCw :size="14" />{{ checkingReadiness ? '检查中…' : '重新自检' }}</button>
+      <button class="act" type="button" @click="emit('open-settings')"><Settings2 :size="14" />前往设置</button>
+    </div>
+    <div v-else-if="readiness" class="creation-ready"><CheckCircle2 :size="15" />创作环境已就绪</div>
+
+    <section v-if="!isSeriesEpisode" class="creation-brief">
+      <div class="creation-brief-grid">
+        <div class="creation-brief-field content-kind-field">
+          <label>内容类型</label>
+          <div class="creation-preset-seg" role="group" aria-label="内容类型">
+            <button v-for="item in CONTENT_TYPES" :key="item.key" type="button" :class="{ active: contentType === item.key }" :aria-pressed="contentType === item.key" @click="contentType = item.key">
+              <component :is="item.icon" :size="16" />
+              <span><strong>{{ item.label }}</strong><small>{{ item.short }}</small></span>
+            </button>
+          </div>
+        </div>
+        <div class="creation-brief-field">
+          <label for="target-platform">发布平台</label>
+          <select id="target-platform" v-model="targetPlatform">
+            <option v-for="item in PLATFORMS" :key="item.key" :value="item.key">{{ item.label }}</option>
+          </select>
+        </div>
+        <div class="creation-brief-field">
+          <label for="target-duration">目标时长</label>
+          <div class="creation-duration"><input id="target-duration" v-model.number="targetDuration" type="number" min="5" max="600" step="5" /><span>秒</span></div>
+        </div>
+      </div>
+      <div class="content-preset-detail" aria-live="polite">
+        <div class="content-preset-lead"><strong>{{ selectedContentType.summary }}</strong><span>建议 {{ selectedContentType.duration }} 秒 · 当前 {{ targetDuration }} 秒，可手动修改</span></div>
+        <div class="content-preset-rules">
+          <span><b>结构</b>{{ selectedContentType.flow }}</span>
+          <span><b>表达</b>{{ selectedContentType.voice }}</span>
+          <span><b>画面</b>{{ selectedContentType.visual }}</span>
+        </div>
+      </div>
+      <div class="creation-preset-note">平台与成片设置：{{ presetFeatureSummary }}</div>
+    </section>
+
     <div class="row" style="gap:6px;margin-bottom:12px">
       <button class="ghost mode-btn" :class="{ active: mode === 'idea' }" @click="mode = 'idea'">主题生成</button>
       <button class="ghost mode-btn" :class="{ active: mode === 'script' }" @click="mode = 'script'">导入剧本</button>
@@ -317,17 +498,17 @@ async function stopCreation() {
 
     <div v-if="mode === 'idea'" class="guided-field">
       <div class="field-label-line">
-        <label for="creation-idea">主题 / 创意</label>
+        <label for="creation-idea">{{ selectedContentType.ideaLabel }}</label>
         <button class="field-help-trigger" type="button" aria-label="查看主题和创意填写说明" aria-describedby="creation-idea-tip"
           :aria-expanded="activeHelp === 'idea'" @mouseenter="activeHelp = 'idea'" @mouseleave="activeHelp = ''"
           @focus="activeHelp = 'idea'" @blur="activeHelp = ''" @click="activeHelp = 'idea'"><CircleHelp :size="15" /></button>
         <span id="creation-idea-tip" class="field-tooltip" :class="{ visible: activeHelp === 'idea' }" role="tooltip">
-          <strong>填写说明</strong><span>写清主角、发生了什么、主要冲突和结局方向；一到三句话即可，不必写成完整剧本。</span>
-          <strong>参考示例</strong><span>雨夜，一名连续值班的急救员在空荡车站发现母亲留下的饭盒。他原本不愿回家，听见母亲的语音后终于改变决定。</span>
+          <strong>填写说明</strong><span>{{ selectedContentType.help }}</span>
+          <strong>参考示例</strong><span>{{ selectedContentType.example }}</span>
         </span>
       </div>
       <textarea id="creation-idea" v-model="idea" aria-describedby="creation-idea-tip" @focus="activeHelp = ''" @click="activeHelp = ''"
-        placeholder="用 1-3 句话描述故事核心"></textarea>
+        :placeholder="selectedContentType.placeholder"></textarea>
     </div>
     <div v-else class="script-import-fields">
       <div v-if="!isSeriesEpisode" class="guided-field">
@@ -360,6 +541,17 @@ async function stopCreation() {
       </div>
     </div>
 
+    <details class="creation-advanced" :open="advancedOpen" @toggle="advancedOpen = $event.target.open">
+      <summary>
+        <span class="advanced-summary-icon"><SlidersHorizontal :size="18" /></span>
+        <span class="advanced-summary-copy">
+          <strong>{{ advancedOpen ? '精细控制已展开' : '精细控制' }}</strong>
+          <small>风格、质量、配音、固定资产与模板</small>
+        </span>
+        <span class="advanced-summary-current">{{ advancedSummary }}</span>
+        <span class="advanced-summary-state">{{ advancedOpen ? '收起' : '展开' }}<ChevronDown :size="17" /></span>
+      </summary>
+      <div class="creation-advanced-body">
     <div class="grid2 guided-grid">
       <div class="guided-field">
         <div class="field-label-line">
@@ -390,6 +582,11 @@ async function stopCreation() {
           aria-describedby="creation-requirements-tip" placeholder="填写时长、镜头数、一致性和禁止项"
           @focus="activeHelp = ''" @click="activeHelp = ''"></textarea>
       </div>
+    </div>
+
+    <div v-if="!isSeriesEpisode && (lastUsed.style || lastUsed.user_requirement)" class="reuse-last-row">
+      <span>需要复用上一条视频的风格和约束？</span>
+      <button class="ghost" type="button" @click="applyLastUsed">沿用上次设置</button>
     </div>
 
     <div class="setbox">
@@ -431,6 +628,8 @@ async function stopCreation() {
       <div class="chkrow">
         <label class="chk"><input type="checkbox" v-model="sub" /> 烧录字幕</label>
         <label class="chk"><input type="checkbox" v-model="tts" /> 配音（TTS）</label>
+        <label class="chk"><input type="checkbox" v-model="hookEnabled" /> 开场钩子</label>
+        <label class="chk"><input type="checkbox" v-model="coverEnabled" /> 导出封面</label>
       </div>
       <div class="pgrid" style="margin-top:10px">
         <div class="pfield"><label>配音音色</label>
@@ -509,9 +708,11 @@ async function stopCreation() {
       <button class="ghost" @click="applyTemplate">应用</button>
       <button class="ghost" @click="saveTemplate">存为模板</button>
     </div>
+      </div>
+    </details>
 
-    <div style="margin-top:10px">
-      <button class="act" :disabled="!!progress" @click="submit">{{ mode === 'script' ? '开始（导入剧本）' : '开始（生成剧本）' }}</button>
+    <div class="creation-submitbar">
+      <button class="act" :disabled="!!progress || !readiness || !readiness.ready" @click="submit">{{ mode === 'script' ? '导入剧本并开始' : '生成剧本并开始' }}</button>
       <button v-if="progress" class="ghost danger-text" :disabled="stopping" @click="stopCreation"><Square :size="14" />{{ stopping ? '终止中…' : '终止剧本生成' }}</button>
       <span class="muted">{{ msg }}</span>
     </div>

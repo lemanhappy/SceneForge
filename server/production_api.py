@@ -121,6 +121,8 @@ class ProductionAPI:
                 if "subtitle_enabled" in body: ov["subtitle_enabled"] = bool(body.get("subtitle_enabled"))
                 if "subtitle_burn_in" in body: ov["subtitle_burn_in"] = bool(body.get("subtitle_burn_in"))
                 if "tts_enabled" in body: ov["tts_enabled"] = bool(body.get("tts_enabled"))
+                if "hook_enabled" in body: ov["hook_enabled"] = bool(body.get("hook_enabled"))
+                if "cover_enabled" in body: ov["cover_enabled"] = bool(body.get("cover_enabled"))
                 if body.get("voice"): ov["voice"] = str(body.get("voice"))
                 if body.get("bgm_track"): ov["bgm_track"] = str(body.get("bgm_track"))
                 source_session_id = previous_episode_id if series_id else str(body.get("continuity_source_session_id") or "").strip()
@@ -573,7 +575,7 @@ class ProductionAPI:
         return out
 
     def _has_final(self, sid: str) -> bool:
-        """Whether a final video exists yet — lets the UI show 看成片/发布/清理 only
+        """Whether a final video exists yet — lets the UI show 看成片/分享/清理 only
         once there's something to act on (the final video is produced at the
         ``final`` stage)."""
         try:
@@ -673,6 +675,7 @@ class ProductionAPI:
             "provider_route_preview": provider_route_preview,
             "provider_route": record.get("provider_route"),
             "quality_tier": record.get("quality_tier", "balanced"),
+            "publish_capabilities": self.adapters.publish_capabilities() if hasattr(self.adapters, "publish_capabilities") else {"share_enabled": False, "messaging_enabled": False},
             "continuity_source_session_id": record.get("continuity_source_session_id", ""),
             "series_id": record.get("series_id", ""),
             "episode_number": record.get("episode_number"),

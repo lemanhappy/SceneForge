@@ -494,8 +494,9 @@ class SceneForgePublishTests(unittest.IsolatedAsyncioTestCase):
         pub_root = (Path(tmp) / "pub").as_posix()
         (configs / "script2video.yaml").write_text(
             "hosting:\n"
+            "  enabled: true\n"
             "  type: local_static\n"
-            "  public_base_url: https://cdn.example.com/sceneforge\n"
+            "  public_base_url: https://media.sceneforge.test/public\n"
             f"  local_root: {pub_root}\n"
             "messaging:\n"
             "  outbound_enabled: true\n"
@@ -519,7 +520,7 @@ class SceneForgePublishTests(unittest.IsolatedAsyncioTestCase):
             result = await adapter.sceneforge_publish({})
             self.assertTrue(result.ok)
             payload = json.loads(result.content)
-            self.assertTrue(payload["url"].startswith("https://cdn.example.com/sceneforge/"))
+            self.assertTrue(payload["url"].startswith("https://media.sceneforge.test/public/"))
             self.assertEqual(payload["channels_notified"], 1)
             self.assertTrue(payload["hosting_configured"])
             self.assertEqual(index.get(record["session_id"])["stage"], "published")
@@ -549,6 +550,32 @@ class SceneForgePublishTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(payload["hosting_configured"])
             self.assertFalse(payload["messaging_configured"])
             self.assertEqual(payload["channels_notified"], 0)
+            self.assertTrue(payload["exported_only"])
+
+    async def test_publish_without_public_host_does_not_send_local_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            index = SessionIndex(tmp)
+            record = index.create(idea="x")
+            final = index.working_dir(record["session_id"]) / "script2video" / "final_video.mp4"
+            final.parent.mkdir(parents=True, exist_ok=True)
+            final.write_text("video", encoding="utf-8")
+            configs = Path(tmp) / "configs"
+            configs.mkdir(parents=True, exist_ok=True)
+            (configs / "script2video.yaml").write_text(
+                "hosting:\n  enabled: false\n"
+                "messaging:\n  outbound_enabled: true\n  channels:\n"
+                "    - type: console\n      enabled: true\n      echo: false\n",
+                encoding="utf-8",
+            )
+
+            result = await SceneForgeAdapters(Path(tmp), index).sceneforge_publish({})
+
+            payload = json.loads(result.content)
+            self.assertTrue(result.ok)
+            self.assertTrue(payload["exported_only"])
+            self.assertTrue(payload["messaging_configured"])
+            self.assertEqual(payload["channels_notified"], 0)
+            self.assertNotEqual(index.get(record["session_id"])["stage"], "published")
 
 
 class SessionIndexReviewTaskTests(unittest.TestCase):

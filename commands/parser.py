@@ -3,7 +3,8 @@ from typing import Optional
 
 from .models import UserCommand
 
-_APPROVE = {"通过", "批准", "同意", "确认", "好的", "发布", "approve", "ok", "publish"}
+_APPROVE = {"通过", "批准", "同意", "确认", "好的", "approve", "ok"}
+_PUBLISH = {"发布", "分享", "生成分享链接", "publish", "share"}
 _STATUS = {"查看状态", "状态", "进度", "status"}
 _PAUSE = {"暂停", "pause"}
 _RESUME = {"继续", "恢复", "resume"}
@@ -36,6 +37,8 @@ def parse_user_command(text: str, source: str = "", session_id: Optional[str] = 
 
     if raw in _APPROVE or low in _APPROVE:
         return cmd("approve")
+    if raw in _PUBLISH or low in _PUBLISH:
+        return cmd("publish")
     if raw in _STATUS or low in _STATUS:
         return cmd("status")
     if raw in _PAUSE or low in _PAUSE:

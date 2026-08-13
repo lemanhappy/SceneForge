@@ -18,11 +18,13 @@ class TestResolve(unittest.TestCase):
         self.assertEqual(resolve_domain("short_drama").key, "short_drama")
         self.assertEqual(resolve_domain("explainer").key, "explainer")
         self.assertEqual(resolve_domain("knowledge").key, "knowledge")
+        self.assertEqual(resolve_domain("product").key, "product")
 
     def test_aliases(self):
         self.assertEqual(resolve_domain("短剧").key, "short_drama")
         self.assertEqual(resolve_domain("影视解说").key, "explainer")
         self.assertEqual(resolve_domain("科普").key, "knowledge")
+        self.assertEqual(resolve_domain("商品展示").key, "product")
         self.assertEqual(resolve_domain("DRAMA").key, "short_drama")  # case-insensitive
 
     def test_empty_and_unknown_fall_back_to_general(self):
@@ -64,7 +66,7 @@ class TestListing(unittest.TestCase):
         items = list_domains()
         keys = [d["key"] for d in items]
         self.assertEqual(keys[0], "general")
-        for k in ("short_drama", "explainer", "knowledge"):
+        for k in ("short_drama", "explainer", "knowledge", "product"):
             self.assertIn(k, keys)
         self.assertTrue(all("label" in d for d in items))
 
@@ -92,6 +94,12 @@ class TestHookInjection(unittest.TestCase):
         model = _FakeModel("x")
         asyncio.run(HookWriter(model).generate("y", chinese=True))
         self.assertNotIn("领域要求", model.prompt)
+
+    def test_product_pack_has_generation_rules(self):
+        pack = resolve_domain("product")
+        self.assertIn("卖点证明", pack.screenwriter)
+        self.assertIn("商品始终是视觉主体", pack.storyboard)
+        self.assertIn("product photography", pack.video)
 
 
 class TestPipelineWiring(unittest.TestCase):

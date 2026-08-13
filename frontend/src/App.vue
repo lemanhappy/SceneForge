@@ -125,7 +125,7 @@ function sidebarTitle(session) {
       <!-- keep each view alive so in-flight state (polling, forms) survives tab switches -->
       <keep-alive>
         <component :is="current.comp" v-bind="currentProps" :key="current.key"
-          @sessions-changed="loadSidebarSessions" @history-selection="syncHistorySelection" />
+          @sessions-changed="loadSidebarSessions" @history-selection="syncHistorySelection" @open-settings="activateTab('config')" />
       </keep-alive>
     </main>
     <ConfirmModal />

@@ -17,8 +17,11 @@ def _run(coro):
 class TestParseUserCommand(unittest.TestCase):
     def test_approve(self):
         self.assertEqual(parse_user_command("通过").command_type, "approve")
-        self.assertEqual(parse_user_command("发布").command_type, "approve")
         self.assertEqual(parse_user_command("OK").command_type, "approve")
+
+    def test_publish_is_explicit(self):
+        self.assertEqual(parse_user_command("发布").command_type, "publish")
+        self.assertEqual(parse_user_command("生成分享链接").command_type, "publish")
 
     def test_revise_strips_prefix(self):
         cmd = parse_user_command("修改：主角改成女老师，结尾更温暖")

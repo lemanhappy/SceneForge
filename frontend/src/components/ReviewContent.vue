@@ -29,6 +29,7 @@ const emit = defineEmits(['refresh', 'stats', 'publish', 'clean', 'cost', 'reope
 const mediaRevision = ref(Date.now())
 const finalUrl = computed(() => mediaUrl('/api/production/' + props.sid + '/video?v=' + mediaRevision.value))
 const hasFinal = computed(() => !!(props.snap && props.snap.has_final))
+const shareEnabled = computed(() => !!(props.snap && props.snap.publish_capabilities && props.snap.publish_capabilities.share_enabled))
 
 // 成片仍使用阶段级 AI 修改；剧本、分镜和镜头提示词均在正文原位编辑。
 const REVISE_LABEL = { final: '成片' }
@@ -1362,11 +1363,11 @@ watch(() => {
             <section><h3>发布检查</h3>
               <div class="publish-check"><CheckCircle2 :size="16" /><div><strong>{{ totals.videos }}/{{ totals.total }} 镜头完成</strong><span>分镜视频已合成</span></div></div>
               <div class="publish-check"><component :is="allQualityPass ? CheckCircle2 : AlertTriangle" :size="16" /><div><strong>{{ allQualityPass ? '质量检查通过' : qualityIssueCount + ' 个镜头需要复核' }}</strong><span>以镜头审核结果为准</span></div></div>
-              <div class="publish-check"><CheckCircle2 :size="16" /><div><strong>成片文件已就绪</strong><span>{{ costLabel ? '预计成本 ' + costLabel : '可下载或发布' }}</span></div></div>
+              <div class="publish-check"><CheckCircle2 :size="16" /><div><strong>成片文件已就绪</strong><span>{{ costLabel ? '预计成本 ' + costLabel : '可下载导出' }}</span></div></div>
             </section>
             <section><h3>导出与发布</h3>
               <a class="act final-action" :href="finalUrl" download="成片.mp4"><Download :size="15" />下载成片</a>
-              <button v-if="canPublish" class="act final-action" @click="emit('publish')"><Share2 :size="15" />发布分享</button>
+              <button v-if="canPublish && shareEnabled" class="act final-action" @click="emit('publish')"><Share2 :size="15" />生成分享链接</button>
               <button class="ghost final-action" @click="emit('cost')"><Calculator :size="15" />成本明细</button>
               <button v-if="canClean" class="ghost final-action danger-text" @click="emit('clean')"><Trash2 :size="15" />清理中间文件</button>
             </section>

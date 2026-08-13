@@ -130,6 +130,59 @@ class AppSettingsService:
             raise RuntimeError("文件夹选择器返回了无效目录，请手动输入绝对路径")
         return str(path.resolve())
 
+    def readiness(self) -> dict:
+        """Return a secret-free preflight for starting a normal video project."""
+        from agent_runtime.config import (
+            image_api_key, image_base_url, image_model, llm_api_key, llm_base_url,
+            llm_model, tts_api_key, video_profiles,
+        )
+        from scripts.doctor import run_checks
+
+        checks = []
+
+        def add(key: str, label: str, ok: bool, detail: str, *, required: bool = True) -> None:
+            checks.append({
+                "key": key,
+                "label": label,
+                "status": "ok" if ok else ("error" if required else "warning"),
+                "detail": detail,
+                "required": required,
+            })
+
+        for item in run_checks(self.workspace_root, check_web=True):
+            if item["name"] == "Model configuration":
+                continue
+            add(
+                "local_" + item["name"].lower().replace(" ", "_"),
+                item["name"],
+                item["status"] == "ok",
+                item["detail"],
+                required=item["status"] != "warning",
+            )
+
+        llm_ok = bool(llm_api_key(self.workspace_root) and llm_model(self.workspace_root) and llm_base_url(self.workspace_root))
+        add("llm", "文本与视觉模型", llm_ok, "已配置" if llm_ok else "缺少 API Key、模型名或 API 地址")
+
+        image_ok = bool(image_api_key(self.workspace_root) and image_model(self.workspace_root) and image_base_url(self.workspace_root))
+        add("image", "图像模型", image_ok, "已配置" if image_ok else "缺少 API Key、模型名或 API 地址")
+
+        profiles = [item for item in video_profiles(self.workspace_root) if item.get("enabled")]
+        video_ok = any(item.get("api_key") and item.get("model") and item.get("base_url") for item in profiles)
+        add("video", "视频模型", video_ok, f"{len(profiles)} 个启用配置" if video_ok else "没有完整可用的视频模型配置")
+
+        tts_ok = bool(tts_api_key(self.workspace_root))
+        add("tts", "配音服务", tts_ok, "已配置" if tts_ok else "未配置；可关闭本片配音后继续", required=False)
+
+        required_errors = [item for item in checks if item["required"] and item["status"] == "error"]
+        warnings = [item for item in checks if item["status"] == "warning"]
+        if required_errors:
+            summary = "、".join(item["label"] for item in required_errors) + "需要处理"
+        elif warnings:
+            summary = "核心创作能力已就绪，" + "、".join(item["label"] for item in warnings) + "可选配置未完成"
+        else:
+            summary = "本地环境和核心模型均已就绪"
+        return {"ready": not required_errors, "summary": summary, "checks": checks}
+
     def update(self, values: dict) -> dict:
         values = values or {}
         with file_lock(self.path):

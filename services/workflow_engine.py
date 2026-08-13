@@ -2,7 +2,10 @@
 
 Drives a topic through gated stages, pausing for user confirmation at each:
 
-    topic -> [script] -> 通过 -> [storyboard] -> 通过 -> [video] -> 通过 -> [final] -> 通过 -> 发布
+    topic -> [script] -> 通过 -> [storyboard] -> 通过 -> [video] -> 通过 -> [final] -> 完成制作
+
+Sharing is an explicit action after local production completes. It is available
+only when public hosting is configured.
 
 Each stage reuses the existing pipeline building blocks (Idea2VideoPipeline /
 Script2VideoPipeline methods) and writes the same on-disk artifacts, so it stays
@@ -203,6 +206,10 @@ class WorkflowEngine:
             cfg.setdefault("subtitle", {})["burn_in"] = bool(ov["subtitle_burn_in"])
         if ov.get("tts_enabled") is not None:
             cfg.setdefault("audio", {}).setdefault("tts", {})["enabled"] = bool(ov["tts_enabled"])
+        if ov.get("hook_enabled") is not None:
+            cfg.setdefault("video", {}).setdefault("hook", {})["enabled"] = bool(ov["hook_enabled"])
+        if ov.get("cover_enabled") is not None:
+            cfg.setdefault("video", {}).setdefault("cover", {})["enabled"] = bool(ov["cover_enabled"])
         if ov.get("voice"):
             tts = cfg.setdefault("audio", {}).setdefault("tts", {})
             if str(tts.get("provider") or "openai").lower() == "minimax":
@@ -742,14 +749,9 @@ class WorkflowEngine:
         # generation failure leaves the current gate still pending (re-approvable)
         # instead of stranding the session.
         if gate == "final":
-            try:
-                summary = await self._do_publish(session)
-            except Exception as exc:
-                self.session_index.update_stage(session_id, "final_review_pending", f"Publish failed: {exc}")
-                return {"ok": False, "stage": "final", "error": str(exc), "note": "发布失败，修复后可点击页面右上角的阶段按钮重试。"}
             self.session_index.resolve_review_task(session_id, pending["review_id"], "approved")
-            self.session_index.update_stage(session_id, "completed", "Published")
-            return {"ok": True, "stage": "completed", "summary": summary}
+            self.session_index.update_stage(session_id, "completed", "Production completed")
+            return {"ok": True, "stage": "completed", "summary": "成片制作已完成，可下载本地文件。"}
 
         next_gate = GATES[GATES.index(gate) + 1]
 
@@ -1526,7 +1528,7 @@ class WorkflowEngine:
     def _finalize(self, session: dict) -> str:
         final_path = self._idea_dir(session["session_id"]) / "final_video.mp4"
         exists = final_path.exists()
-        return ("成片已就绪，请回复「通过」发布并回传链接。" if exists
+        return ("成片已就绪，请审核并完成制作。" if exists
                 else "未找到成片文件，请先完成视频阶段。")
 
     async def _do_publish(self, session: dict) -> str:

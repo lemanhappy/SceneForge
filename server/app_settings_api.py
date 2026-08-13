@@ -20,6 +20,10 @@ class AppSettingsAPI:
                 initial = (body or {}).get("initial_directory")
                 selected = await asyncio.to_thread(self.service.select_directory, initial)
                 return 200, {"selected": bool(selected), "path": selected or ""}
+            if parts == ["api", "app-settings", "readiness"]:
+                if method != "GET":
+                    return 405, {"error": "method not allowed"}
+                return 200, await asyncio.to_thread(self.service.readiness)
             if parts != ["api", "app-settings"]:
                 return 404, {"error": "not found"}
             if method == "GET":

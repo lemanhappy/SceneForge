@@ -116,15 +116,24 @@ class TestTriggerService(unittest.IsolatedAsyncioTestCase):
             tasks = index.list_review_tasks(record["session_id"])
             self.assertEqual(tasks[0]["status"], "approved")
 
-    async def test_approve_final_triggers_publish(self):
+    async def test_approve_final_completes_locally(self):
         with tempfile.TemporaryDirectory() as tmp:
             svc, index, adapters = self._service(tmp)
             record = index.create(idea="x")
             index.create_review_task(record["session_id"], stage="final", summary="成片")
             res = await svc.handle_command(UserCommand(command_type="approve"))
             self.assertTrue(res["ok"])
-            self.assertTrue(res["published"])
-            self.assertIn(("publish", {"session_id": record["session_id"]}), adapters.calls)
+            self.assertTrue(res["local_completed"])
+            self.assertEqual(index.get(record["session_id"])["stage"], "completed")
+            self.assertFalse(any(call[0] == "publish" for call in adapters.calls))
+
+    async def test_publish_command_explicitly_invokes_adapter(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            svc, index, adapters = self._service(tmp)
+            record = index.create(idea="x")
+            res = await svc.handle_command(UserCommand(command_type="publish"), sender_id="u1")
+            self.assertTrue(res["ok"])
+            self.assertIn(("publish", {"session_id": record["session_id"], "target": "u1"}), adapters.calls)
 
     async def test_revise_records_instruction(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -368,9 +377,9 @@ class TestWorkflowEngineStateMachine(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(done["stage"], "completed")
             self.assertEqual(index.get(sid)["stage"], "completed")
 
-            # one generation per stage + publish, in order
-            self.assertEqual([c[0] for c in engine.calls], ["script", "storyboard", "video", "publish"])
-            # four review tasks, all approved
+            # Finishing production is local-only; sharing is a separate explicit action.
+            self.assertEqual([c[0] for c in engine.calls], ["script", "storyboard", "video"])
+            # four review tasks, all approved; the last gate completes locally.
             tasks = index.list_review_tasks(sid)
             self.assertEqual([t["stage"] for t in tasks], ["script", "storyboard", "shot_video", "final"])
             self.assertTrue(all(t["status"] == "approved" for t in tasks))
@@ -427,6 +436,9 @@ class TestWorkflowEngineStateMachine(unittest.IsolatedAsyncioTestCase):
             self.assertIs(eff2["subtitle"]["burn_in"], False)
             self.assertIs(eff2["audio"]["tts"]["enabled"], True)
             self.assertEqual(eff2["audio"]["tts"]["voice"], "nova")
+            eff_packaging = engine._effective_config({"overrides": {"hook_enabled": True, "cover_enabled": True}})
+            self.assertTrue(eff_packaging["video"]["hook"]["enabled"])
+            self.assertTrue(eff_packaging["video"]["cover"]["enabled"])
             minimax = engine._effective_config({
                 "config_snapshot": {"audio": {"tts": {"provider": "minimax", "voice_id": "old"}}},
                 "overrides": {"voice": "new"},

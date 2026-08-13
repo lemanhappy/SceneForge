@@ -2,6 +2,7 @@ import asyncio
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from agent_runtime.session_index import SessionIndex
 from server.app_settings_api import AppSettingsAPI
@@ -81,6 +82,16 @@ class AppSettingsApiTests(unittest.IsolatedAsyncioTestCase):
             status, state = await api.handle("POST", "/api/app-settings/directory-picker", {})
             self.assertEqual(status, 200)
             self.assertEqual(state, {"selected": False, "path": ""})
+
+    async def test_readiness_route_is_secret_free(self):
+        with tempfile.TemporaryDirectory() as workspace:
+            service = AppSettingsService(workspace, SessionIndex(workspace))
+            api = AppSettingsAPI(service)
+            with patch.object(service, "readiness", return_value={"ready": True, "summary": "ok", "checks": []}):
+                status, state = await api.handle("GET", "/api/app-settings/readiness")
+            self.assertEqual(status, 200)
+            self.assertTrue(state["ready"])
+            self.assertNotIn("api_key", str(state).lower())
 
 
 if __name__ == "__main__":

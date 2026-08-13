@@ -117,8 +117,34 @@ _KNOWLEDGE = DomainPack(
     ),
 )
 
+_PRODUCT = DomainPack(
+    key="product",
+    label="商品展示",
+    screenwriter=(
+        "[领域：商品展示]\n"
+        "- 按'痛点或使用结果→核心卖点证明→真实使用场景→收束'组织内容，不要写成无关剧情。\n"
+        "- 开场3秒内展示商品、目标用户的痛点或使用后的明确结果，避免品牌空镜和冗长铺垫。\n"
+        "- 只使用用户提供的功能、材质、规格和效果，不编造功效、销量、认证或对比数据。\n"
+        "- 每个卖点必须能由一个具体动作、细节或使用场景在画面中证明；语言短促、具体。\n"
+        "- 除非用户明确提供，不擅自添加价格、折扣、购买链接或夸张行动号召。"
+    ),
+    storyboard=(
+        "[领域：商品展示]\n"
+        "- 商品始终是视觉主体，依次覆盖整体外观、材质细节、功能动作和真实使用情境。\n"
+        "- 使用稳定清晰的英雄镜头、微距细节和手部操作镜头；避免遮挡、形变和无法实现的结构变化。\n"
+        "- 每个镜头只证明一个卖点，展示动作前后保持商品外观、颜色、标识和配件一致。"
+    ),
+    hook=(
+        "钩子直接展示目标用户的痛点、使用结果或最直观的核心功能，不用空泛口号。"
+    ),
+    video=(
+        "clean commercial product photography, accurate product geometry and materials, "
+        "controlled studio lighting, clear functional demonstration, realistic hands and usage"
+    ),
+)
+
 _PACKS: Dict[str, DomainPack] = {
-    p.key: p for p in (_SHORT_DRAMA, _EXPLAINER, _KNOWLEDGE)
+    p.key: p for p in (_SHORT_DRAMA, _EXPLAINER, _KNOWLEDGE, _PRODUCT)
 }
 
 # Accept a few friendly aliases (Chinese names, common synonyms) so config /
@@ -135,6 +161,10 @@ _ALIASES: Dict[str, str] = {
     "知识": "knowledge",
     "knowledge": "knowledge",
     "popsci": "knowledge",
+    "商品": "product",
+    "商品展示": "product",
+    "产品": "product",
+    "product_showcase": "product",
 }
 
 _GENERAL = DomainPack(key="general", label="通用（不限定领域）")
@@ -276,6 +306,6 @@ def list_domains() -> List[Dict[str, str]]:
 
 
 def builtin_packs() -> List[DomainPack]:
-    """The built-in domain packs (短剧/解说/科普) as full DomainPacks, so the
+    """The built-in domain packs as full DomainPacks, so the
     Skill 市场 page can show them read-only (they're compiled in, not files)."""
     return list(_PACKS.values())

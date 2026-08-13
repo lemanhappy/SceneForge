@@ -7,7 +7,7 @@ import Series from './Series.vue'
 const props = defineProps({
   resetKey: { type: Number, default: 0 },
 })
-const emit = defineEmits(['sessions-changed'])
+const emit = defineEmits(['sessions-changed', 'open-settings'])
 const mode = ref('single')
 
 watch(() => props.resetKey, () => {
@@ -29,7 +29,7 @@ watch(() => props.resetKey, () => {
     </div>
 
     <keep-alive>
-      <Production v-if="mode === 'single'" :reset-key="resetKey" @sessions-changed="emit('sessions-changed')" />
+      <Production v-if="mode === 'single'" :reset-key="resetKey" @sessions-changed="emit('sessions-changed')" @open-settings="emit('open-settings')" />
       <Series v-else @sessions-changed="emit('sessions-changed')" />
     </keep-alive>
   </div>

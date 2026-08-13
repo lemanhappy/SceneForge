@@ -115,9 +115,9 @@ def build_sceneforge_adapter_specs(workspace_root: str | Path, session_index: An
             description=(
                 "Publish the active SceneForge session's finished video: host it (returns a shareable "
                 "URL) and回传 the link through any enabled messaging channel (Feishu/console). Use "
-                "this for the final '发布' action after the user approves the film. Hosting and "
-                "messaging are read from the pipeline config (configs/*.yaml); if neither is "
-                "configured it reports the local file path instead."
+                "this only for an explicit '生成分享链接' action after production is complete. "
+                "Hosting and messaging are read from the pipeline config (configs/*.yaml); if "
+                "neither is configured it reports the local file path without marking it published."
             ),
             handler=adapter.sceneforge_publish,
             schema={
@@ -684,17 +684,26 @@ class SceneForgeAdapters:
         host = ArtifactHost.from_config(config)
         dispatcher = ChannelDispatcher.from_config(config)
 
+        if host is None:
+            payload = {
+                "session_id": session_id,
+                "final_video_path": _portable_path(final_video, self.workspace_root),
+                "url": None,
+                "hosted": None,
+                "channels_notified": 0,
+                "hosting_configured": False,
+                "messaging_configured": dispatcher is not None,
+                "exported_only": True,
+            }
+            return ToolResult("sceneforge_publish", True, json.dumps(payload, ensure_ascii=False, indent=2), payload)
+
         hosted = None
         try:
-            if host is not None:
-                hosted = await host.upload(final_video)
+            hosted = await host.upload(final_video)
             sent = 0
             if dispatcher is not None:
                 target = str(args.get("target", "") or "") or None
-                if hosted is not None:
-                    sent = len(await dispatcher.broadcast_artifact(hosted, target=target))
-                else:
-                    sent = len(await dispatcher.broadcast_text(f"成片已生成（本地路径）：{final_video}", target=target))
+                sent = len(await dispatcher.broadcast_artifact(hosted, target=target))
         except Exception as exc:
             self.session_index.update_stage(session_id, "error", f"Publish failed: {exc}")
             raise
@@ -709,8 +718,21 @@ class SceneForgeAdapters:
             "channels_notified": sent,
             "hosting_configured": host is not None,
             "messaging_configured": dispatcher is not None,
+            "exported_only": False,
         }
         return ToolResult("sceneforge_publish", True, json.dumps(payload, ensure_ascii=False, indent=2), payload)
+
+    def publish_capabilities(self) -> dict[str, Any]:
+        from artifacts import ArtifactHost
+        from channels import ChannelDispatcher
+
+        config = self._load_publish_config("")
+        host = ArtifactHost.from_config(config)
+        dispatcher = ChannelDispatcher.from_config(config)
+        return {
+            "share_enabled": host is not None,
+            "messaging_enabled": dispatcher is not None,
+        }
 
     async def sceneforge_review(self, args: dict[str, Any], runtime: ToolRuntimeContext | None = None) -> ToolResult:
         from .review import REVIEW_STAGES, REVIEW_STATUSES
